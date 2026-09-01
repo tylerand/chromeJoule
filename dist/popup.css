@@ -759,6 +759,26 @@ body, button, input {
   background: #fcece8;
 }
 
+.btn-pause {
+  background: transparent;
+  border-color: #d7ebf5;
+  color: #3788b4;
+}
+
+.btn-pause:hover:not(:disabled) {
+  background: #e7f3f8;
+}
+
+.btn-resume {
+  background: transparent;
+  border-color: #dceee5;
+  color: #3b8d6b;
+}
+
+.btn-resume:hover:not(:disabled) {
+  background: #e8f5ee;
+}
+
 .btn-disconnect {
   background: transparent;
   border-color: #dde5e2;
@@ -777,6 +797,24 @@ body, button, input {
 
 .controller.dark .btn-danger:hover:not(:disabled) {
   background: #382421;
+}
+
+.controller.dark .btn-pause {
+  border-color: #1d4655;
+  color: #73d2ed;
+}
+
+.controller.dark .btn-pause:hover:not(:disabled) {
+  background: #1d3b45;
+}
+
+.controller.dark .btn-resume {
+  border-color: #245040;
+  color: #76c9a4;
+}
+
+.controller.dark .btn-resume:hover:not(:disabled) {
+  background: #1e4034;
 }
 
 .controller.dark .btn-disconnect {

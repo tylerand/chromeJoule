@@ -33,6 +33,8 @@ class BleJouleView extends React.Component<BleJouleViewProps, any> {
     timerDuration: 0,
     timerEndsAt: 0,
     pendingTimerSeconds: 0,
+    timerPaused: false,
+    pausedTimerSeconds: 0,
     timerStarting: false,
     timerExtensionUpdating: false,
     timerStartFailed: false,
@@ -90,6 +92,8 @@ class BleJouleView extends React.Component<BleJouleViewProps, any> {
             timerDuration: 0,
             timerEndsAt: 0,
             pendingTimerSeconds: 0,
+            timerPaused: false,
+            pausedTimerSeconds: 0,
             timerStarting: false,
             timerExtensionUpdating: false,
             timerStartFailed: false,
@@ -136,6 +140,8 @@ class BleJouleView extends React.Component<BleJouleViewProps, any> {
         timerDuration: cookTime,
         timerEndsAt: timed ? Date.now() + (cookTime * 1000) : 0,
         pendingTimerSeconds: timed ? 0 : cookTime,
+        timerPaused: false,
+        pausedTimerSeconds: 0,
         timerStartFailed: false,
         activeSetPoint: setPoint,
         timeAtTemperatureStartedAt: 0,
@@ -160,6 +166,8 @@ class BleJouleView extends React.Component<BleJouleViewProps, any> {
         timerDuration: 0,
         timerEndsAt: 0,
         pendingTimerSeconds: 0,
+        timerPaused: false,
+        pausedTimerSeconds: 0,
         timerStarting: false,
         timerStartFailed: false,
         activeSetPoint: null,
@@ -177,6 +185,9 @@ class BleJouleView extends React.Component<BleJouleViewProps, any> {
         status: "Cook stopped.",
         timerDuration: 0,
         timerEndsAt: 0,
+        pendingTimerSeconds: 0,
+        timerPaused: false,
+        pausedTimerSeconds: 0,
         activeSetPoint: null,
         timeAtTemperatureStartedAt: 0,
         timeAtTemperaturePending: false,
@@ -204,6 +215,8 @@ class BleJouleView extends React.Component<BleJouleViewProps, any> {
       timerDuration: cookTime,
       timerEndsAt: 0,
       pendingTimerSeconds: cookTime,
+      timerPaused: false,
+      pausedTimerSeconds: 0,
       timerStartFailed: false,
     })
   }
@@ -216,10 +229,15 @@ class BleJouleView extends React.Component<BleJouleViewProps, any> {
       ? Math.max(0, Math.ceil((this.state.timerEndsAt - this.state.now) / 1000))
       : data ? Math.max(0, data.timeRemaining - Math.floor((this.state.now - this.state.dataReceivedAt) / 1000)) : 0
     const timerDuration = this.state.timerDuration || (data && data.cookTime) || 0
-    const hasTimer = isCooking && timerDuration > 0 && this.state.pendingTimerSeconds === 0
+    const hasTimer = isCooking && timerDuration > 0 && this.state.pendingTimerSeconds === 0 && !this.state.timerPaused
     const timerIsPending = isCooking && this.state.pendingTimerSeconds > 0
-    const displayedTimerSeconds = hasTimer ? timeRemaining : timerIsPending ? this.state.pendingTimerSeconds : 0
-    const timerProgress = hasTimer || timerIsPending ? Math.min(1, displayedTimerSeconds / timerDuration) : 1
+    const timerIsPaused = isCooking && this.state.timerPaused
+    const displayedTimerSeconds = hasTimer
+      ? timeRemaining
+      : timerIsPaused
+        ? this.state.pausedTimerSeconds
+        : timerIsPending ? this.state.pendingTimerSeconds : 0
+    const timerProgress = hasTimer || timerIsPending || timerIsPaused ? Math.min(1, displayedTimerSeconds / timerDuration) : 1
     const selectedTemperature = parseFloat(this.state.setPoint)
     const targetTemperature = this.state.isCelsius ? selectedTemperature : (selectedTemperature - 32) / 1.8
     const appliedTargetTemperature = isCooking && this.state.activeSetPoint !== null
@@ -369,7 +387,7 @@ class BleJouleView extends React.Component<BleJouleViewProps, any> {
                 </div>
                 <div className="panel-actions">
                   {!isCooking &&
-                    <button className="btn btn-primary" onClick={this.start} disabled={this.state.starting}>{this.state.starting ? "Starting..." : "Start preheat"}</button>}
+                    <button className="btn btn-primary" onClick={this.start} disabled={this.state.starting}>{this.state.starting ? "Starting..." : "Start"}</button>}
                   {isCooking &&
                     <button className="btn btn-primary" onClick={this.updateTemperature} disabled={this.state.starting || !canUpdateTemperature}>{this.state.starting ? "Updating..." : "Update temperature"}</button>}
                   {isCooking && <button className="btn btn-danger" onClick={this.stop} disabled={this.state.starting || this.state.timerExtensionUpdating}>Stop cook</button>}
@@ -381,16 +399,16 @@ class BleJouleView extends React.Component<BleJouleViewProps, any> {
                     <div>
                       <p className="panel-label">Cook timer</p>
                       <p className="at-temperature-detail">
-                        {hasTimer ? "remaining" : timerIsPending ? "Starts when the water reaches the target" : isCooking ? "No timer set" : "Start a cook to add a timer"}
+                        {hasTimer ? "remaining" : timerIsPaused ? "paused" : timerIsPending ? "Starts when the water reaches the target" : isCooking ? "No timer set" : "Start a cook to add a timer"}
                       </p>
                     </div>
                     <strong className="at-temperature-reading">
-                      {hasTimer || timerIsPending ? this.formatDuration(displayedTimerSeconds) : "--:--"}
+                      {hasTimer || timerIsPending || timerIsPaused ? this.formatDuration(displayedTimerSeconds) : "--:--"}
                     </strong>
                   </div>
 
-                  {(hasTimer || timerIsPending) && (
-                    <div className={`linear-timer-track ${hasTimer ? "counting" : "solid"} ${timerIsPending ? "paused" : ""}`}>
+                  {(hasTimer || timerIsPending || timerIsPaused) && (
+                    <div className={`linear-timer-track ${hasTimer ? "counting" : "solid"} ${timerIsPending || timerIsPaused ? "paused" : ""}`}>
                       <div 
                         className="linear-timer-progress" 
                         style={{ width: `${timerProgress * 100}%` }}
@@ -437,7 +455,15 @@ class BleJouleView extends React.Component<BleJouleViewProps, any> {
                 </div>
                 {isCooking &&
                   <div className="panel-actions">
-                    <button className="btn btn-primary" onClick={this.setTimer} disabled={this.state.starting || this.state.timerStarting || this.state.timerExtensionUpdating}>{this.state.timerStarting ? "Starting timer..." : timerIsPending || hasTimer ? "Update timer" : "Start timer"}</button>
+                    <button className="btn btn-primary" onClick={this.setTimer} disabled={this.state.starting || this.state.timerStarting || this.state.timerExtensionUpdating}>{this.state.timerStarting ? "Starting timer..." : timerIsPending || hasTimer || timerIsPaused ? "Update timer" : "Start timer"}</button>
+                    {(hasTimer || timerIsPaused) &&
+                      <button
+                        className={`btn ${timerIsPaused ? "btn-resume" : "btn-pause"}`}
+                        onClick={timerIsPaused ? this.resumeTimer : this.pauseTimer}
+                        disabled={this.state.starting || this.state.timerStarting || this.state.timerExtensionUpdating}
+                      >
+                        {timerIsPaused ? "Resume" : "Pause"}
+                      </button>}
                   </div>}
               </section>
 
@@ -533,6 +559,8 @@ class BleJouleView extends React.Component<BleJouleViewProps, any> {
         timerDuration: cookTime > 0 ? this.state.timerDuration || cookTime : 0,
         timerEndsAt: startsTimerImmediately ? Date.now() + (cookTime * 1000) : 0,
         pendingTimerSeconds: startsTimerImmediately ? 0 : cookTime,
+        timerPaused: false,
+        pausedTimerSeconds: 0,
         timerStartFailed: false,
         timeAtTemperatureStartedAt: 0,
         timeAtTemperaturePending: true,
@@ -550,6 +578,8 @@ class BleJouleView extends React.Component<BleJouleViewProps, any> {
         timerDuration: cookTime > 0 ? this.state.timerDuration || cookTime : 0,
         timerEndsAt: timed ? Date.now() + (cookTime * 1000) : 0,
         pendingTimerSeconds: timed ? 0 : cookTime,
+        timerPaused: false,
+        pausedTimerSeconds: 0,
         timerStartFailed: false,
         timeAtTemperatureStartedAt: 0,
         timeAtTemperaturePending: true,
@@ -568,6 +598,47 @@ class BleJouleView extends React.Component<BleJouleViewProps, any> {
     if (this.state.timerEndsAt > 0) return Math.max(0, Math.ceil((this.state.timerEndsAt - Date.now()) / 1000))
     const data: JouleData = this.state.data
     return Math.max(0, data.timeRemaining - Math.floor((Date.now() - this.state.dataReceivedAt) / 1000))
+  }
+
+  private pauseTimer = () => {
+    // Joule does not expose a timer-pause command. Keep heating and freeze the
+    // extension's countdown; resume will replace Joule's timer with this value.
+    this.clearTimerExtensionUpdate()
+    const remainingSeconds = this.remainingTimerSeconds()
+    if (remainingSeconds <= 0) return
+
+    this.setState({
+      timerEndsAt: 0,
+      timerPaused: true,
+      pausedTimerSeconds: remainingSeconds,
+      error: "",
+      status: "Timer paused. Joule will continue holding the target temperature.",
+    })
+  }
+
+  private resumeTimer = async () => {
+    const remainingSeconds = this.state.pausedTimerSeconds
+    if (remainingSeconds <= 0) return
+
+    this.setState({ timerStarting: true, error: "", status: "Resuming timer..." })
+    try {
+      if (!this.state.developerMode) {
+        const timed = await this.client.setTimer(remainingSeconds)
+        if (!timed) throw new Error("Joule restarted, but did not accept the resumed timer.")
+      }
+      this.setState({
+        data: this.state.developerMode ? this.mockData(1, this.state.activeSetPoint, remainingSeconds) : this.state.data,
+        timerEndsAt: Date.now() + (remainingSeconds * 1000),
+        timerPaused: false,
+        pausedTimerSeconds: 0,
+        error: "",
+        status: "Timer resumed.",
+      })
+    } catch (error) {
+      this.setState({ error: error.message || String(error), status: "Timer remains paused." })
+    } finally {
+      this.setState({ timerStarting: false })
+    }
   }
 
   private addMinutes = (minutes: number) => {
@@ -621,6 +692,8 @@ class BleJouleView extends React.Component<BleJouleViewProps, any> {
         error: "",
         status: "Timer updated.",
         timerEndsAt: Date.now() + (remainingSeconds * 1000),
+        timerPaused: false,
+        pausedTimerSeconds: 0,
       })
     } catch (error) {
       this.setState({ error: error.message || String(error) })
@@ -630,6 +703,7 @@ class BleJouleView extends React.Component<BleJouleViewProps, any> {
   }
 
   private timerSecondsForState(state) {
+    if (state.timerPaused) return state.pausedTimerSeconds
     const data: JouleData = state.data
     if (state.timerEndsAt > 0) return Math.max(0, Math.ceil((state.timerEndsAt - state.now) / 1000))
     if (!data) return 0
@@ -722,6 +796,8 @@ class BleJouleView extends React.Component<BleJouleViewProps, any> {
         timerDuration: this.state.timerDuration || cookTime,
         timerEndsAt: Date.now() + (cookTime * 1000),
         pendingTimerSeconds: 0,
+        timerPaused: false,
+        pausedTimerSeconds: 0,
         timerStartFailed: false,
       })
     } catch (error) {
@@ -741,6 +817,9 @@ class BleJouleView extends React.Component<BleJouleViewProps, any> {
         cookTime: "",
         timerDuration: 0,
         timerEndsAt: 0,
+        pendingTimerSeconds: 0,
+        timerPaused: false,
+        pausedTimerSeconds: 0,
         activeSetPoint: null,
         timeAtTemperatureStartedAt: 0,
         timeAtTemperaturePending: false,
@@ -770,6 +849,8 @@ class BleJouleView extends React.Component<BleJouleViewProps, any> {
       timerDuration: cookTime,
       timerEndsAt: startsTimerImmediately ? Date.now() + (cookTime * 1000) : 0,
       pendingTimerSeconds: startsTimerImmediately ? 0 : cookTime,
+      timerPaused: false,
+      pausedTimerSeconds: 0,
       timerStartFailed: false,
       activeSetPoint: setPoint,
       timeAtTemperatureStartedAt: 0,
