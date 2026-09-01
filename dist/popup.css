@@ -2,10 +2,22 @@
   box-sizing: border-box;
 }
 
+.temperature-panel.cooking .temperature-reading strong {
+  color: #25845d;
+}
+
+.controller.dark .temperature-panel.cooking .temperature-reading strong {
+  color: #8de1ba;
+}
+
 body {
   margin: 0;
   min-width: 400px;
   min-height: 100vh;
+}
+
+.controller.dark .panel-actions {
+  border-color: #334340;
 }
 
 #content,
@@ -35,6 +47,70 @@ body {
   display: flex;
   justify-content: space-between;
   margin-bottom: 28px;
+}
+
+.header-controls {
+  align-items: center;
+  display: flex;
+  gap: 20px;
+}
+
+.developer-toggle {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  color: #52625d;
+  cursor: pointer;
+  display: flex;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  gap: 9px;
+  padding: 0;
+}
+
+.developer-toggle-track {
+  background: #cbd7d3;
+  border-radius: 999px;
+  display: block;
+  height: 20px;
+  padding: 2px;
+  transition: background 180ms ease;
+  width: 38px;
+}
+
+.developer-toggle-track span {
+  background: #fff;
+  border-radius: 50%;
+  display: block;
+  height: 16px;
+  transition: transform 180ms ease;
+  width: 16px;
+}
+
+.developer-toggle.enabled {
+  color: #17704d;
+}
+
+.developer-toggle.enabled .developer-toggle-track {
+  background: #40a878;
+}
+
+.developer-toggle.enabled .developer-toggle-track span {
+  transform: translateX(18px);
+}
+
+.controller.dark .developer-toggle {
+  color: #b6c9c4;
+}
+
+.controller.dark .developer-toggle.enabled {
+  color: #8de1ba;
+}
+
+.developer-toggle:focus-visible {
+  outline: 2px solid #4cc3e8;
+  outline-offset: 4px;
 }
 
 .eyebrow,
@@ -148,6 +224,7 @@ body {
 .connection-status p,
 .status-detail {
   color: #65716e;
+  font-size: 14px;
   margin: 0;
 }
 
@@ -158,11 +235,11 @@ body {
 
 .cook-dashboard {
   display: grid;
-  gap: 20px;
+  gap: 16px;
 }
 
 .dashboard-status .dashboard-card-text {
-  padding: 22px 26px !important;
+  padding: 18px 24px !important;
 }
 
 .status-heading {
@@ -170,6 +247,17 @@ body {
   display: flex;
   gap: 16px;
   justify-content: space-between;
+}
+
+.connection-actions {
+  align-items: flex-end;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.connection-actions button {
+  min-width: 0 !important;
 }
 
 .state-pill {
@@ -199,30 +287,41 @@ body {
 
 .dashboard-grid {
   display: grid;
-  gap: 20px;
-  grid-template-columns: minmax(0, 0.9fr) minmax(190px, 0.8fr) minmax(190px, 0.8fr) minmax(300px, 1.2fr);
+  gap: 16px;
+  grid-template-columns: minmax(0, 1.35fr) minmax(300px, 1fr);
 }
 
 .dashboard-grid > .temperature-panel,
 .dashboard-grid > .timer-panel,
-.dashboard-grid > .at-temperature-panel,
-.dashboard-grid > .controls-panel {
+.dashboard-grid > .at-temperature-panel {
   min-width: 0;
 }
 
 .temperature-panel {
-  grid-column: span 2;
-}
-
-.controls-panel {
-  grid-column: 1 / -1;
+  grid-column: auto;
 }
 
 .temperature-panel .dashboard-card-text,
 .timer-panel .dashboard-card-text,
-.at-temperature-panel .dashboard-card-text,
-.controls-panel .dashboard-card-text {
-  padding: 26px !important;
+.at-temperature-panel .dashboard-card-text {
+  padding: 24px !important;
+}
+
+.temperature-panel,
+.timer-panel {
+  display: flex;
+  flex-direction: column;
+}
+
+.temperature-panel .dashboard-card-text,
+.timer-panel .dashboard-card-text {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+}
+
+.at-temperature-panel {
+  grid-column: 1 / -1;
 }
 
 .temperature-reading {
@@ -231,7 +330,7 @@ body {
   font-size: clamp(42px, 5vw, 68px);
   gap: 14px;
   max-width: 100%;
-  margin: 32px 0 28px;
+  margin: 26px 0 22px;
   min-width: 0;
 }
 
@@ -260,18 +359,8 @@ body {
 }
 
 .temperature-summary {
-  align-items: center;
   border-top: 1px solid #dde5e2;
-  color: #6c7975;
-  display: flex;
-  font-size: 14px;
-  justify-content: space-between;
-  padding-top: 16px;
-}
-
-.temperature-summary b {
-  color: inherit;
-  font-size: 16px;
+  margin-top: auto;
 }
 
 .controller.dark .temperature-summary {
@@ -280,9 +369,9 @@ body {
 }
 
 .cook-timer {
-  height: 160px;
-  margin: 22px auto 0;
-  max-width: 160px;
+  height: 138px;
+  margin: 16px auto 0;
+  max-width: 138px;
   position: relative;
   width: 100%;
 }
@@ -296,7 +385,7 @@ body {
 .cook-timer-track,
 .cook-timer-progress {
   fill: none;
-  stroke-width: 10;
+  stroke-width: 8;
 }
 
 .cook-timer-track {
@@ -312,7 +401,11 @@ body {
 .cook-timer.solid .cook-timer-progress {
   stroke-dasharray: 439.8;
   stroke-dashoffset: 0;
-  opacity: 0.25;
+  opacity: 0.16;
+}
+
+.cook-timer.paused .cook-timer-progress {
+  opacity: 0.6;
 }
 
 .cook-timer-content {
@@ -329,7 +422,7 @@ body {
   color: #6c7975;
   font-size: 13px;
   line-height: 1.4;
-  margin: 14px 0 0;
+  margin: 10px 0 0;
   text-align: center;
 }
 
@@ -342,31 +435,30 @@ body {
 }
 
 .at-temperature-reading {
-  display: block;
-  font-size: 36px;
+  font-size: 34px;
   font-variant-numeric: tabular-nums;
   font-weight: 500;
   letter-spacing: -0.04em;
   line-height: 1;
-  margin: 37px 0 33px;
+  margin: 0;
 }
 
 .at-temperature-detail {
-  border-top: 1px solid #dde5e2;
   color: #6c7975;
   font-size: 13px;
   line-height: 1.45;
   margin: 0;
-  padding-top: 16px;
+}
+
+.at-temperature-content {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
 }
 
 .controller.dark .at-temperature-detail {
   border-color: #334340;
   color: #b0c1bd;
-}
-
-.cook-settings {
-  margin-top: 22px;
 }
 
 .setting-field {
@@ -376,6 +468,10 @@ body {
 
 .setting-field + .setting-field {
   border-top: 1px solid #dde5e2;
+}
+
+.timer-setting {
+  margin-top: auto;
 }
 
 .setting-field > span {
@@ -427,30 +523,48 @@ body {
 }
 
 .setting-field b,
-.unit-button {
+.unit-switcher {
   color: #d45c43;
   font-size: 15px;
   margin-left: 8px;
   white-space: nowrap;
 }
 
-.unit-button {
+.unit-switcher {
+  align-items: center;
   background: #f9e5df;
-  border: 0;
   border-radius: 5px;
-  cursor: pointer;
-  font-weight: 700;
-  padding: 5px 7px;
+  display: inline-flex;
+  padding: 3px;
 }
 
-.cook-actions {
+.unit-switcher button {
+  background: transparent;
+  border: 0;
+  border-radius: 4px;
+  color: #a18f88;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 700;
+  min-width: 39px;
+  padding: 5px 8px;
+}
+
+.unit-switcher button.active {
+  background: #fff;
+  color: #d45c43;
+  box-shadow: 0 1px 3px rgba(64, 44, 35, 0.18);
+}
+
+.panel-actions {
+  border-top: 1px solid #dde5e2;
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
   padding: 4px 18px 20px !important;
 }
 
-.cook-actions > * {
+.panel-actions > * {
   margin: 0 !important;
 }
 
@@ -486,12 +600,22 @@ body {
 }
 
 .controller.dark .setting-field b,
-.controller.dark .unit-button {
+.controller.dark .unit-switcher {
   color: #73d2ed;
 }
 
-.controller.dark .unit-button {
+.controller.dark .unit-switcher {
   background: #1d3b45;
+}
+
+.controller.dark .unit-switcher button.active {
+  background: #285160;
+  color: #73d2ed;
+  box-shadow: none;
+}
+
+.controller.dark .unit-switcher button {
+  color: #66808a;
 }
 
 .loading-container {
@@ -507,8 +631,9 @@ body {
   }
 
   .temperature-panel,
-  .controls-panel {
-    grid-column: auto;
+  .timer-panel,
+  .at-temperature-panel {
+    grid-column: 1 / -1;
   }
 }
 
@@ -525,11 +650,19 @@ body {
     font-size: 27px;
   }
 
+  .header-controls {
+    gap: 12px;
+  }
+
+  .developer-toggle span:first-child {
+    display: none;
+  }
+
   .dashboard-grid {
     grid-template-columns: 1fr;
   }
 
-  .controls-panel {
+  .at-temperature-panel {
     grid-column: auto;
   }
 
@@ -540,7 +673,7 @@ body {
   }
 
   .cook-timer {
-    height: 160px;
-    max-width: 160px;
+    height: 138px;
+    max-width: 138px;
   }
 }
