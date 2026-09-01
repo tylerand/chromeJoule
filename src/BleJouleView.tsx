@@ -12,6 +12,7 @@ class BleJouleView extends React.Component<BleJouleViewProps, any> {
   private client = new JouleBleClient()
   private clockInterval: number
   private temperatureRefreshInterval: number
+  private timerExtensionTimeout = 0
   private timerCompletionNotified = false
 
   public state = {
@@ -32,6 +33,7 @@ class BleJouleView extends React.Component<BleJouleViewProps, any> {
     timerEndsAt: 0,
     pendingTimerSeconds: 0,
     timerStarting: false,
+    timerExtensionUpdating: false,
     timerStartFailed: false,
     activeSetPoint: null,
     timeAtTemperatureStartedAt: 0,
@@ -56,6 +58,7 @@ class BleJouleView extends React.Component<BleJouleViewProps, any> {
   public componentWillUnmount() {
     window.clearInterval(this.clockInterval)
     window.clearInterval(this.temperatureRefreshInterval)
+    this.clearTimerExtensionUpdate()
     this.client.disconnect()
   }
 
@@ -74,23 +77,27 @@ class BleJouleView extends React.Component<BleJouleViewProps, any> {
           timerEndsAt: this.initialTimerEnd(data),
           activeSetPoint: data.setPoint === undefined ? this.state.activeSetPoint : data.setPoint,
         }),
-        () => this.setState({
-          connected: false,
-          connecting: false,
-          data: null,
-          dataReceivedAt: 0,
-          timerDuration: 0,
-          timerEndsAt: 0,
-          pendingTimerSeconds: 0,
-          timerStarting: false,
-          timerStartFailed: false,
-          activeSetPoint: null,
-          timeAtTemperatureStartedAt: 0,
-          timeAtTemperaturePending: false,
-          targetTemperaturePhaseObserved: false,
-          starting: false,
-          status: "Connect directly to a nearby Joule over Bluetooth.",
-        }),
+        () => {
+          this.clearTimerExtensionUpdate()
+          this.setState({
+            connected: false,
+            connecting: false,
+            data: null,
+            dataReceivedAt: 0,
+            timerDuration: 0,
+            timerEndsAt: 0,
+            pendingTimerSeconds: 0,
+            timerStarting: false,
+            timerExtensionUpdating: false,
+            timerStartFailed: false,
+            activeSetPoint: null,
+            timeAtTemperatureStartedAt: 0,
+            timeAtTemperaturePending: false,
+            targetTemperaturePhaseObserved: false,
+            starting: false,
+            status: "Connect directly to a nearby Joule over Bluetooth.",
+          })
+        },
       )
       this.setState({ connected: true, connecting: false })
     } catch (error) {
@@ -139,6 +146,7 @@ class BleJouleView extends React.Component<BleJouleViewProps, any> {
   }
 
   public stop = async () => {
+    this.clearTimerExtensionUpdate()
     if (this.state.developerMode) {
       this.setState({
         data: this.mockData(0),
@@ -177,6 +185,7 @@ class BleJouleView extends React.Component<BleJouleViewProps, any> {
   }
 
   public setTimer = async () => {
+    this.clearTimerExtensionUpdate()
     const cookTime = parseInt(this.state.cookTime, 10) * 60
     if (!isFinite(cookTime) || cookTime <= 0 || cookTime > 86400) {
       this.setState({ error: "Enter a cook time from 1 to 1,440 minutes." })
@@ -341,7 +350,7 @@ class BleJouleView extends React.Component<BleJouleViewProps, any> {
                     <button className="btn btn-primary" onClick={this.start} disabled={this.state.starting}>{this.state.starting ? "Starting..." : "Start preheat"}</button>}
                   {isCooking &&
                     <button className="btn btn-primary" onClick={this.updateTemperature} disabled={this.state.starting || !canUpdateTemperature}>{this.state.starting ? "Updating..." : "Update temperature"}</button>}
-                  {isCooking && <button className="btn btn-danger" onClick={this.stop} disabled={this.state.starting}>Stop cook</button>}
+                  {isCooking && <button className="btn btn-danger" onClick={this.stop} disabled={this.state.starting || this.state.timerExtensionUpdating}>Stop cook</button>}
                 </div></section>
 
               <section className="panel timer-panel">
@@ -370,23 +379,34 @@ class BleJouleView extends React.Component<BleJouleViewProps, any> {
                   </p>
                   <label className="setting-field timer-setting">
                     <span>Set timer <em>Optional</em></span>
-                    <div>
-                      <input
-                        type="number"
-                        inputMode="numeric"
-                        min="1"
-                        value={this.state.cookTime}
-                        onChange={(event) => this.setState({ cookTime: event.target.value })}
-                        placeholder="Add a timer"
-                        aria-label="Cook time in minutes"
-                      />
-                      <b>min</b>
+                    <div className="timer-input-row">
+                      <div className="timer-input">
+                        <input
+                          type="number"
+                          inputMode="numeric"
+                          min="1"
+                          value={this.state.cookTime}
+                          onChange={(event) => this.setState({ cookTime: event.target.value })}
+                          placeholder="Add a timer"
+                          aria-label="Cook time in minutes"
+                        />
+                        <b>min</b>
+                      </div>
+                      {(hasTimer || timerIsPending) &&
+                        <button
+                          className="btn btn-secondary timer-add-button"
+                          type="button"
+                          onClick={this.addFiveMinutes}
+                          disabled={this.state.timerExtensionUpdating}
+                        >
+                          +5 min
+                        </button>}
                     </div>
                   </label>
                 </div>
                 {isCooking &&
                   <div className="panel-actions">
-                    <button className="btn btn-primary" onClick={this.setTimer} disabled={this.state.starting || this.state.timerStarting}>{this.state.timerStarting ? "Starting timer..." : timerIsPending || hasTimer ? "Update timer" : "Start timer"}</button>
+                    <button className="btn btn-primary" onClick={this.setTimer} disabled={this.state.starting || this.state.timerStarting || this.state.timerExtensionUpdating}>{this.state.timerStarting ? "Starting timer..." : timerIsPending || hasTimer ? "Update timer" : "Start timer"}</button>
                   </div>}
               </section>
 
@@ -461,6 +481,7 @@ class BleJouleView extends React.Component<BleJouleViewProps, any> {
   }
 
   private updateTemperature = async () => {
+    this.clearTimerExtensionUpdate()
     const input = parseFloat(this.state.setPoint)
     const setPoint = this.state.isCelsius ? input : (input - 32) / 1.8
     if (!isFinite(setPoint) || setPoint < 0 || setPoint > 100) {
@@ -515,6 +536,59 @@ class BleJouleView extends React.Component<BleJouleViewProps, any> {
     if (this.state.timerEndsAt > 0) return Math.max(0, Math.ceil((this.state.timerEndsAt - Date.now()) / 1000))
     const data: JouleData = this.state.data
     return Math.max(0, data.timeRemaining - Math.floor((Date.now() - this.state.dataReceivedAt) / 1000))
+  }
+
+  private addFiveMinutes = () => {
+    const timerIsRunning = this.state.timerEndsAt > 0
+    const currentSeconds = timerIsRunning ? this.remainingTimerSeconds() : this.state.pendingTimerSeconds
+    if (currentSeconds <= 0) return
+
+    const timerDuration = (this.state.timerDuration || currentSeconds) + (5 * 60)
+    const nextTimerSeconds = currentSeconds + (5 * 60)
+    this.setState({
+      cookTime: String(Math.ceil(timerDuration / 60)),
+      timerDuration,
+      timerEndsAt: timerIsRunning ? Date.now() + (nextTimerSeconds * 1000) : 0,
+      pendingTimerSeconds: timerIsRunning ? 0 : nextTimerSeconds,
+      error: "",
+      status: timerIsRunning ? "Added 5 minutes. Updating Joule shortly." : "Added 5 minutes to the pending timer.",
+    }, () => {
+      if (timerIsRunning && !this.state.developerMode) this.queueTimerExtensionUpdate()
+    })
+  }
+
+  private queueTimerExtensionUpdate() {
+    this.clearTimerExtensionUpdate()
+    if (this.remainingTimerSeconds() <= 30) {
+      this.updateExtendedTimer()
+      return
+    }
+    this.timerExtensionTimeout = window.setTimeout(() => this.updateExtendedTimer(), 30000)
+  }
+
+  private clearTimerExtensionUpdate() {
+    if (this.timerExtensionTimeout) window.clearTimeout(this.timerExtensionTimeout)
+    this.timerExtensionTimeout = 0
+  }
+
+  private updateExtendedTimer = async () => {
+    this.timerExtensionTimeout = 0
+    const remainingSeconds = this.remainingTimerSeconds()
+    if (remainingSeconds <= 0) return
+
+    this.setState({ timerExtensionUpdating: true })
+    try {
+      await this.client.setTimer(remainingSeconds)
+      this.setState({
+        error: "",
+        status: "Added 5 minutes to the timer.",
+        timerEndsAt: Date.now() + (remainingSeconds * 1000),
+      })
+    } catch (error) {
+      this.setState({ error: error.message || String(error) })
+    } finally {
+      this.setState({ timerExtensionUpdating: false })
+    }
   }
 
   private timerSecondsForState(state) {
