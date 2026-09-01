@@ -9,8 +9,8 @@ chrome.runtime.onMessage.addListener((message) => {
 
   chrome.notifications.create("joule-timer-complete", {
     type: "basic",
-    iconUrl: "icon.png",
+    iconUrl: chrome.runtime.getURL("icon.png"),
     title: "Joule timer complete",
     message: "Your cook timer has reached zero.",
-  })
+  }).catch((error) => console.error("Could not show timer-complete notification.", error))
 })
