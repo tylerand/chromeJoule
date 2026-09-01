@@ -2,6 +2,8 @@ import * as React from "react"
 import * as ReactDOM from "react-dom"
 import BleJouleView from "./BleJouleView"
 
+// Theme state belongs at the application root so the controller can remain
+// focused on the Joule connection and cook state.
 class Main extends React.Component<{}, { darkMode: boolean }> {
   public state = { darkMode: true }
 

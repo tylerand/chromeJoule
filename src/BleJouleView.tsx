@@ -43,7 +43,9 @@ class BleJouleView extends React.Component<BleJouleViewProps, any> {
   }
 
   public componentDidMount() {
-    // BLE telemetry is refreshed less often than the displayed clocks.
+    // BLE telemetry is refreshed less often than the displayed clocks. The
+    // local clock keeps countdown and elapsed-time displays accurate between
+    // device updates, while the slower refresh limits Bluetooth traffic.
     this.clockInterval = window.setInterval(() => {
       this.advanceMockCook()
       this.setState({ now: Date.now() })
@@ -146,6 +148,7 @@ class BleJouleView extends React.Component<BleJouleViewProps, any> {
   }
 
   public stop = async () => {
+    // A queued +5 update would restart a program, so discard it before stopping.
     this.clearTimerExtensionUpdate()
     if (this.state.developerMode) {
       this.setState({
@@ -185,6 +188,7 @@ class BleJouleView extends React.Component<BleJouleViewProps, any> {
   }
 
   public setTimer = async () => {
+    // A manual timer value supersedes a queued +5 update.
     this.clearTimerExtensionUpdate()
     const cookTime = parseInt(this.state.cookTime, 10) * 60
     if (!isFinite(cookTime) || cookTime <= 0 || cookTime > 86400) {
@@ -481,6 +485,8 @@ class BleJouleView extends React.Component<BleJouleViewProps, any> {
   }
 
   private updateTemperature = async () => {
+    // Temperature changes restart Joule's program; do not let a delayed timer
+    // update race that restart.
     this.clearTimerExtensionUpdate()
     const input = parseFloat(this.state.setPoint)
     const setPoint = this.state.isCelsius ? input : (input - 32) / 1.8
@@ -489,7 +495,6 @@ class BleJouleView extends React.Component<BleJouleViewProps, any> {
       return
     }
 
-    const data: JouleData = this.state.data
     const cookTime = this.state.timerEndsAt > 0
       ? this.remainingTimerSeconds()
       : this.state.pendingTimerSeconds
@@ -539,6 +544,8 @@ class BleJouleView extends React.Component<BleJouleViewProps, any> {
   }
 
   private addFiveMinutes = () => {
+    // Apply each press locally first so the timer remains responsive. A running
+    // device timer is synchronized after the user's presses settle.
     const timerIsRunning = this.state.timerEndsAt > 0
     const currentSeconds = timerIsRunning ? this.remainingTimerSeconds() : this.state.pendingTimerSeconds
     if (currentSeconds <= 0) return
@@ -559,6 +566,7 @@ class BleJouleView extends React.Component<BleJouleViewProps, any> {
 
   private queueTimerExtensionUpdate() {
     this.clearTimerExtensionUpdate()
+    // Do not delay an extension that would otherwise be sent near completion.
     if (this.remainingTimerSeconds() <= 30) {
       this.updateExtendedTimer()
       return
@@ -578,6 +586,8 @@ class BleJouleView extends React.Component<BleJouleViewProps, any> {
 
     this.setState({ timerExtensionUpdating: true })
     try {
+      // Recalculate just before the request so the duration sent to Joule
+      // reflects the time that elapsed during the debounce interval.
       await this.client.setTimer(remainingSeconds)
       this.setState({
         error: "",
@@ -606,6 +616,8 @@ class BleJouleView extends React.Component<BleJouleViewProps, any> {
       this.timerCompletionNotified = true
       chrome.runtime.sendMessage({ type: "timer-complete" })
     }
+    // Mirror every locally tracked deadline to the service-worker alarm. The
+    // foreground transition remains a precise notification path when open.
     if (this.state.timerEndsAt !== previousState.timerEndsAt) {
       chrome.runtime.sendMessage(
         this.state.timerEndsAt > 0
@@ -662,7 +674,8 @@ class BleJouleView extends React.Component<BleJouleViewProps, any> {
 
   private canStartTimer(setPoint: number) {
     const data: JouleData = this.state.data
-    // Match the Cook phase threshold so both clocks begin from the same point.
+    // Match the Cook phase threshold so the displayed phase, timer, and
+    // time-at-temperature clock transition at one consistent temperature.
     return data && setPoint !== null && data.bathTemp >= setPoint - 0.3
   }
 
@@ -672,6 +685,8 @@ class BleJouleView extends React.Component<BleJouleViewProps, any> {
 
     this.setState({ timerStarting: true, error: "" })
     try {
+      // Timers selected while preheating stay local until this point because
+      // Joule otherwise begins counting down immediately.
       if (!this.state.developerMode) await this.client.setTimer(cookTime)
       this.setState({
         data: this.state.developerMode ? this.mockData(1, this.state.activeSetPoint, cookTime) : this.state.data,
@@ -741,6 +756,8 @@ class BleJouleView extends React.Component<BleJouleViewProps, any> {
     const setPoint = this.state.activeSetPoint
     if (!this.state.developerMode || !data || setPoint === null || data.programStep === 0) return
 
+    // Developer mode changes temperature only; normal timer progression is
+    // still driven by the same local deadline as a physical Joule timer.
     const difference = setPoint - data.bathTemp
     const bathTemp = Math.abs(difference) <= 2 ? setPoint : data.bathTemp + (difference > 0 ? 2 : -2)
     this.setState({ data: { ...data, bathTemp, sequenceNumber: data.sequenceNumber + 1 }, dataReceivedAt: Date.now() })

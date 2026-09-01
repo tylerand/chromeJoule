@@ -8,6 +8,8 @@ Chrome Joule is an unofficial Chrome extension for controlling a nearby Joule so
 - Manual cook controls for temperature and an optional device timer
 - Live water-temperature, cook-phase, and timer updates
 - Device timers and the time-at-temperature clock that begin when the bath reaches its selected temperature
+- Add five minutes to an active or pending timer without repeatedly restarting Joule
+- Browser notification when a timer completes, including when the controller tab is closed
 - Fahrenheit and Celsius display modes
 
 ## Requirements
@@ -46,13 +48,23 @@ the water temperature toward the selected target while exercising the same
 start, stop, timer, and temperature-update controls. Developer mode never
 opens a Bluetooth connection or sends commands to a device.
 
-## Timers and temperature changes
+## Timers, temperature changes, and notifications
 
 A selected timer is held locally until the bath reaches the target temperature,
 then sent to the Joule and started. Raising the target during a timed cook
 preserves the remaining duration but pauses the timer until the new target is
 reached. Lowering the target below the current bath temperature immediately
 updates the device timer with the remaining duration.
+
+Once a timer is set, **+5 min** immediately extends the displayed timer. When
+more than 30 seconds remain, Chrome Joule waits 30 seconds after the last press
+before it sends the combined extension to Joule. Near completion, it sends the
+update immediately. This avoids repeated program restarts when adding time
+several times.
+
+Chrome Joule schedules a Chrome alarm whenever a running timer changes. The
+alarm shows a browser notification at completion even when the controller tab
+is closed. Keep Chrome running for the most reliable timer notifications.
 
 ## Limitations
 
