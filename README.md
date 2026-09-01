@@ -1,88 +1,45 @@
-# Chrome Joule - An unofficial chrome extension to control your ChefSteps Joule
-[![Chrome Joule ](https://i.imgur.com/ru521YW.png)](https://www.youtube.com/watch?v=goPv_ClIndM "Chrome Joule Video")
-## Overview
-Click the image above for a youtube video of the extension in action. Pretty straightforward :)
+# Chrome Joule
 
-(If you want to humor me and read about the making of this, see
-[this](https://medium.com/@_dennisli/reverse-engineering-the-chefsteps-joule-and-making-a-chrome-extension-fa09c78bd87f))
+Chrome Joule is an unofficial Chrome extension for controlling a nearby Joule sous vide cooker over Bluetooth Low Energy. It is not affiliated with ChefSteps or Breville.
 
-Currently, the extension supports the following:
-* Connecting directly to a nearby Joule over Bluetooth
-* Starting and stopping manual cook programs with an optional device-side timer
-* Setting a timer during preheating or an active cook by restarting at the same target temperature
-* Live water-temperature and cooking-state updates
+## Features
 
-## Installation
-The original Chrome Web Store listing is no longer available. Build the extension
-locally and load `dist/` as an unpacked extension.
+- Direct Bluetooth connection to a nearby Joule
+- Manual cook controls for temperature and an optional device timer
+- Live water-temperature, cook-phase, and timer updates
+- A time-at-temperature clock that begins when the bath reaches its selected temperature
+- Fahrenheit and Celsius display modes
 
-## Development
-If you’re interested in a blog post I wrote about the development process, see <>
+## Requirements
 
-### Build and Install
+- Google Chrome on Windows with Bluetooth enabled
+- A Joule that is powered on and not connected to another app
 
+## Build and install
+
+```sh
+npm install
+npm run build
 ```
-$ npm install
-$ npm run build
-```
-To install:
-Navigate to `chrome://extensions`, enable **Developer mode**, then use **Load
-unpacked** to select `dist/`. The extension is packaged as Manifest V3 and
-supports current Chrome releases.
 
-### Bluetooth pairing
+In Chrome, open `chrome://extensions`, enable **Developer mode**, select **Load unpacked**, and choose the repository's `dist` directory. Select the extension icon to open the controller in a new tab.
 
-Click the extension icon to open the controller in a dedicated browser tab,
-then click **Connect Joule** and select the Joule from Chrome's Bluetooth
-picker. On first connection, press the physical button on the Joule within 60
-seconds to authorize the extension. The extension stores that device-specific
-pairing key locally, so later connections do not need another button press.
-Close the Breville+ app or nRF Connect before connecting because the Joule
-supports one Bluetooth connection at a time.
+## Pairing a Joule
 
-If Chrome cannot read the Joule advertiser data, copy its **Manufacturer Data**
-value from nRF Connect into the optional controller field before connecting.
+1. Select **Connect Joule** and choose the cooker in Chrome's Bluetooth picker.
+2. On the first connection, press the button on top of the Joule within 60 seconds.
+3. Chrome Joule stores the resulting device-specific pairing key in local storage, so subsequent connections do not require the button press.
 
-Note: This project uses typescript, so I highly recommend using VSCode for development.
+Close the Breville+ app, nRF Connect, and other Bluetooth clients before connecting; Joule supports only one Bluetooth connection at a time.
 
-### Architecture
-ChromeJoule works by accessing `CirculatorSDK`, an internal SDK used by the Joule Android/iOs apps. And since it doesn't support a lot of the more extensive features like recipe programs, getting a basic understanding of how `CirculatorSDK` works is the most of the work required. Using it also gives us a big advantage, because it handles a lot of the messy stuff that comes with websockets like flaky connections/reconnecting, multiple streams, etc.
+If Chrome cannot read the Joule advertiser data, enter its **Manufacturer Data** from nRF Connect under **Advanced** before connecting.
 
-###  
-Fortunately, the apps were developed in javascript, which makes this kind of interoptability and reverse-engineering possible.
+## How it works
 
-If you decompile the android app, there are a few files of interest:
-* bundle.js
-* chefsteps.js
-* base.proto
+The extension opens a browser-based controller and communicates with Joule's Bluetooth GATT service directly. `JouleBleClient` encodes the subset of the Joule protocol needed to pair, subscribe to live data, and control manual programs. `BleJouleView` renders the controller and derives the displayed cook phase, timer progress, and time-at-temperature from device telemetry.
 
-##### bundle.js
-See [`src/bundle.js`](https://github.com/dennisli92/chromeJoule/blob/master/src/bundle.js). This contains a few modules of interest, primarily `CirculatorSDK`, but also some other helper/utility functions. And for whatever reason, although the code was bundled, it wasn't uglified or minified and still has comments. I tried diagramming out some of the major relationships [here](https://i.imgur.com/QFgDqay.png).
+## Limitations
 
-Major modules to keep in mind:
-* `CirculatorManager` - Entry point to the CirculatorSDK. Most important module
-* `CirculatorClient` - Second most important module for us. As the name implies, it's the client for each circulator (Joule). So stuff like managing connections to the Joule, its state, etc.
-* `Connection` - An abstraction of whatever connection you're using. e.g. bluetooth, websockets, (or if you wish, I'm sure blokchain too)
-* `Stream` and StreamHandler - Handles the sending/receiving of messages across multiple connections
-
-##### chefsteps.js
-I haven't included it in the repo here, in part because it's all uglified code. But it's largely dealing with writing the app in angular and implementation level details of some of the abstract classes (e.g. `Connection`) in `bundle.js`. This chrome extension is modeled of a lot of the code in here.
-
-##### base.proto
-See [`base.proto`](https://github.com/dennisli92/chromeJoule/blob/master/dist/protobuf-files/base.proto)
-Joule is a bit trickier to work with than a simple REST API. Instead, it uses websockets, and sends protobuffer binaries in each websocket body. Each message is encoded as a `StreamMessage` which contains some metadata like `senderAddress`, `recipientAddress`, `streamHandler`
-
-#### How ChromeJoule Works
-So, the way ChromeJoule works is it implements the bare minimum to get the CirculatorSDK running. It creates a wrapper around `CirculatorManager` with [`WebSocketsCirculatorManager`](https://github.com/dennisli92/chromeJoule/blob/master/src/WebSocketsCirculatorManager.ts). And in order to do that, we need to create our own custom [`WebSocketConnectionProvider`](https://github.com/dennisli92/chromeJoule/blob/master/src/WebSocketConnectionProvider.ts), [`WebSocketConnection`](https://github.com/dennisli92/chromeJoule/blob/master/src/WebSocketConnection.ts) and [`WebSocketAddressConnection`](https://github.com/dennisli92/chromeJoule/blob/master/src/WebSocketAddressConnection.ts).
-
-After that, it's a pretty standard react app. It's pretty simple, so we don't use redux or any fancy state management here. See [CirculatorManagerView](https://github.com/dennisli92/chromeJoule/blob/master/src/CirculatorManagerView.tsx). There are a few hacks in place, though.
-
-## Missing features:
-* Pairing with new Joules
-* Multiple Joule support
-* Recipe Walkthroughs
-
-Note: These features, I believe, are all supported in `CirculatorSDK`. So adding them is likely just an exercise in implementing a few abstract classes. 
-
-# Other: 
-The 🔥 icon comes from [EmojiOne 2.1](https://github.com/emojione/emojione) :)
+- Only manual cook programs are supported.
+- Recipe walkthroughs and multi-device management are not supported.
+- The extension has been tested with Chrome on Windows only.
