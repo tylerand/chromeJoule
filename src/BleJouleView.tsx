@@ -403,7 +403,7 @@ class BleJouleView extends React.Component<BleJouleViewProps, any> {
                       </p>
                     </div>
                     <strong className="at-temperature-reading">
-                      {hasTimer || timerIsPending ? this.formatDuration(displayedTimerSeconds) : "--:--"}
+                      {hasTimer || timerIsPending || timerIsPaused ? this.formatDuration(displayedTimerSeconds) : "--:--"}
                     </strong>
                   </div>
 
