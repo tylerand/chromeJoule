@@ -762,6 +762,24 @@ body, button, input {
   transform: translateY(1px);
 }
 
+.btn-secondary {
+  background: #eef2f1;
+  color: #52625d;
+}
+
+.btn-secondary:hover:not(:disabled) {
+  background: #dde5e2;
+}
+
+.controller.dark .btn-secondary {
+  background: #2a3a38;
+  color: #d7e4e0;
+}
+
+.controller.dark .btn-secondary:hover:not(:disabled) {
+  background: #354946;
+}
+
 .controller.dark .btn-primary {
   background: #4cc3e8;
   border-color: #4cc3e8;
@@ -809,6 +827,27 @@ body, button, input {
 
 .controller.dark .btn-text:hover:not(:disabled) {
   background: #2a3a38;
+}
+
+.timer-input-row {
+  display: flex;
+  width: 100%;
+}
+
+.timer-input {
+  align-items: center;
+  display: flex;
+  flex: 0 0 50%;
+  min-width: 0;
+}
+
+.timer-input input {
+  min-width: 0;
+}
+
+.timer-add-button {
+  margin-left: auto;
+  padding: 8px 12px;
 }
 
 /* Advanced Field */
