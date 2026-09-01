@@ -26,11 +26,13 @@ body {
 }
 
 .controller {
+  color: #1e2927;
   padding: 32px;
 }
 
 .controller.dark {
   background: #101719;
+  color: #f5f8f7;
 }
 
 .controller.light {
