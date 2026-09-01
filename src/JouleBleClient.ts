@@ -451,6 +451,13 @@ export default class JouleBleClient {
     if (this.server && this.server.connected) this.server.disconnect()
   }
 
+  public forgetPairing() {
+    // A deliberate disconnect removes only this Joule's saved authorization key.
+    // The next connection will require the physical pairing-button confirmation.
+    if (this.device) localStorage.removeItem(AUTH_KEY_PREFIX + this.device.id)
+    this.authKey = null
+  }
+
   private handleNotification = async (event: any) => {
     if (!this.connected) return
     if (event.target.value.byteLength > 0) {

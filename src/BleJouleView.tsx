@@ -27,6 +27,7 @@ class BleJouleView extends React.Component<BleJouleViewProps, any> {
     error: "",
     manufacturerData: localStorage.getItem("chrome-joule-manufacturer-data") || "",
     showAdvancedSettings: false,
+    showDisconnectConfirmation: false,
     starting: false,
     dataReceivedAt: 0,
     timerDuration: 0,
@@ -96,6 +97,7 @@ class BleJouleView extends React.Component<BleJouleViewProps, any> {
             timeAtTemperatureStartedAt: 0,
             timeAtTemperaturePending: false,
             targetTemperaturePhaseObserved: false,
+            showDisconnectConfirmation: false,
             starting: false,
             status: "Connect directly to a nearby Joule over Bluetooth.",
           })
@@ -265,6 +267,23 @@ class BleJouleView extends React.Component<BleJouleViewProps, any> {
             </button>
           </div>
         </header>
+        {this.state.showDisconnectConfirmation &&
+          <div className="dialog-backdrop">
+            <section className="panel disconnect-dialog" role="dialog" aria-modal="true" aria-labelledby="disconnect-dialog-title">
+              <div className="panel-content">
+                <h2 id="disconnect-dialog-title">Disconnect Joule?</h2>
+                <p>
+                  {this.state.developerMode
+                    ? "This will end the simulated Joule connection."
+                    : "This will remove the saved pairing key. You will need to pair your Joule again by pressing its top button before you can control it."}
+                </p>
+              </div>
+              <div className="dialog-actions">
+                <button className="btn btn-text" type="button" onClick={this.cancelDisconnect}>Cancel</button>
+                <button className="btn btn-danger" type="button" onClick={this.confirmDisconnect}>Disconnect</button>
+              </div>
+            </section>
+          </div>}
         {this.state.error &&
           <section className="panel status-banner">
             <div className="panel-content status-banner-text">{this.state.error}</div></section>}
@@ -294,7 +313,7 @@ class BleJouleView extends React.Component<BleJouleViewProps, any> {
                     <span className={`state-pill ${isCooking ? "active" : ""}`}>
                       {isCooking ? "Cook in progress" : "Ready"}
                     </span>
-                    <button className="btn btn-text" onClick={this.disconnect}>Disconnect</button>
+                    <button className="btn btn-disconnect" onClick={this.requestDisconnect}>Disconnect</button>
                   </div>
                 </div>
                 <p className="status-detail">{this.state.status}</p>
@@ -397,14 +416,24 @@ class BleJouleView extends React.Component<BleJouleViewProps, any> {
                         <b>min</b>
                       </div>
                       {(hasTimer || timerIsPending) &&
-                        <button
-                          className="btn btn-secondary timer-add-button"
-                          type="button"
-                          onClick={this.addFiveMinutes}
-                          disabled={this.state.timerExtensionUpdating}
-                        >
-                          +5 min
-                        </button>}
+                        <div className="timer-add-actions">
+                          <button
+                            className="btn btn-secondary timer-add-button"
+                            type="button"
+                            onClick={() => this.addMinutes(5)}
+                            disabled={this.state.timerExtensionUpdating}
+                          >
+                            +5 min
+                          </button>
+                          <button
+                            className="btn btn-secondary timer-add-button"
+                            type="button"
+                            onClick={() => this.addMinutes(30)}
+                            disabled={this.state.timerExtensionUpdating}
+                          >
+                            +30 min
+                          </button>
+                        </div>}
                     </div>
                   </label>
                 </div>
@@ -543,22 +572,23 @@ class BleJouleView extends React.Component<BleJouleViewProps, any> {
     return Math.max(0, data.timeRemaining - Math.floor((Date.now() - this.state.dataReceivedAt) / 1000))
   }
 
-  private addFiveMinutes = () => {
+  private addMinutes = (minutes: number) => {
     // Apply each press locally first so the timer remains responsive. A running
     // device timer is synchronized after the user's presses settle.
     const timerIsRunning = this.state.timerEndsAt > 0
     const currentSeconds = timerIsRunning ? this.remainingTimerSeconds() : this.state.pendingTimerSeconds
     if (currentSeconds <= 0) return
 
-    const timerDuration = (this.state.timerDuration || currentSeconds) + (5 * 60)
-    const nextTimerSeconds = currentSeconds + (5 * 60)
+    const additionalSeconds = minutes * 60
+    const timerDuration = (this.state.timerDuration || currentSeconds) + additionalSeconds
+    const nextTimerSeconds = currentSeconds + additionalSeconds
     this.setState({
       cookTime: String(Math.ceil(timerDuration / 60)),
       timerDuration,
       timerEndsAt: timerIsRunning ? Date.now() + (nextTimerSeconds * 1000) : 0,
       pendingTimerSeconds: timerIsRunning ? 0 : nextTimerSeconds,
       error: "",
-      status: timerIsRunning ? "Added 5 minutes. Updating Joule shortly." : "Added 5 minutes to the pending timer.",
+      status: timerIsRunning ? `Added ${minutes} minutes. Updating Joule shortly.` : `Added ${minutes} minutes to the pending timer.`,
     }, () => {
       if (timerIsRunning && !this.state.developerMode) this.queueTimerExtensionUpdate()
     })
@@ -591,7 +621,7 @@ class BleJouleView extends React.Component<BleJouleViewProps, any> {
       await this.client.setTimer(remainingSeconds)
       this.setState({
         error: "",
-        status: "Added 5 minutes to the timer.",
+        status: "Timer updated.",
         timerEndsAt: Date.now() + (remainingSeconds * 1000),
       })
     } catch (error) {
@@ -776,11 +806,17 @@ class BleJouleView extends React.Component<BleJouleViewProps, any> {
     }
   }
 
-  private disconnect = () => {
+  private requestDisconnect = () => this.setState({ showDisconnectConfirmation: true })
+
+  private cancelDisconnect = () => this.setState({ showDisconnectConfirmation: false })
+
+  private confirmDisconnect = () => {
+    this.setState({ showDisconnectConfirmation: false })
     if (this.state.developerMode) {
       this.toggleDeveloperMode()
       return
     }
+    this.client.forgetPairing()
     this.client.disconnect()
   }
 

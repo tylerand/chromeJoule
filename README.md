@@ -8,7 +8,7 @@ Chrome Joule is an unofficial Chrome extension for controlling a nearby Joule so
 - Manual cook controls for temperature and an optional device timer
 - Live water-temperature, cook-phase, and timer updates
 - Device timers and the time-at-temperature clock that begin when the bath reaches its selected temperature
-- Add five minutes to an active or pending timer without repeatedly restarting Joule
+- Add five or thirty minutes to an active or pending timer without repeatedly restarting Joule
 - Browser notification when a timer completes, including when the controller tab is closed
 - Fahrenheit and Celsius display modes
 
@@ -36,6 +36,10 @@ Close the Breville+ app, nRF Connect, and other Bluetooth clients before connect
 
 If Chrome cannot read the Joule advertiser data, enter its **Manufacturer Data** from nRF Connect under **Advanced** before connecting.
 
+Selecting **Disconnect** deliberately removes the saved pairing key after
+confirmation. The next connection will require you to press the Joule's top
+button to pair again.
+
 ## How it works
 
 The extension opens a browser-based controller and communicates with Joule's Bluetooth GATT service directly. `JouleBleClient` encodes the subset of the Joule protocol needed to pair, subscribe to live data, and control manual programs. `BleJouleView` renders the controller and derives the displayed cook phase, timer progress, and time-at-temperature from device telemetry.
@@ -56,11 +60,11 @@ preserves the remaining duration but pauses the timer until the new target is
 reached. Lowering the target below the current bath temperature immediately
 updates the device timer with the remaining duration.
 
-Once a timer is set, **+5 min** immediately extends the displayed timer. When
-more than 30 seconds remain, Chrome Joule waits 30 seconds after the last press
-before it sends the combined extension to Joule. Near completion, it sends the
-update immediately. This avoids repeated program restarts when adding time
-several times.
+Once a timer is set, **+5 min** and **+30 min** immediately extend the
+displayed timer. When more than 30 seconds remain, Chrome Joule waits 30
+seconds after the last press before it sends the combined extension to Joule.
+Near completion, it sends the update immediately. This avoids repeated program
+restarts when adding time several times.
 
 Chrome Joule schedules a Chrome alarm whenever a running timer changes. The
 alarm shows a browser notification at completion even when the controller tab
