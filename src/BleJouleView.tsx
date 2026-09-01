@@ -532,6 +532,13 @@ class BleJouleView extends React.Component<BleJouleViewProps, any> {
       this.timerCompletionNotified = true
       chrome.runtime.sendMessage({ type: "timer-complete" })
     }
+    if (this.state.timerEndsAt !== previousState.timerEndsAt) {
+      chrome.runtime.sendMessage(
+        this.state.timerEndsAt > 0
+          ? { type: "timer-scheduled", endsAt: this.state.timerEndsAt }
+          : { type: "timer-cleared" },
+      )
+    }
 
     const previousPhase = this.cookPhaseForState(previousState)
     const currentPhase = this.currentCookPhase()
