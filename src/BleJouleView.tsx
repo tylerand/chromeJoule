@@ -397,14 +397,24 @@ class BleJouleView extends React.Component<BleJouleViewProps, any> {
                         <b>min</b>
                       </div>
                       {(hasTimer || timerIsPending) &&
-                        <button
-                          className="btn btn-secondary timer-add-button"
-                          type="button"
-                          onClick={this.addFiveMinutes}
-                          disabled={this.state.timerExtensionUpdating}
-                        >
-                          +5 min
-                        </button>}
+                        <div className="timer-add-actions">
+                          <button
+                            className="btn btn-secondary timer-add-button"
+                            type="button"
+                            onClick={() => this.addMinutes(5)}
+                            disabled={this.state.timerExtensionUpdating}
+                          >
+                            +5 min
+                          </button>
+                          <button
+                            className="btn btn-secondary timer-add-button"
+                            type="button"
+                            onClick={() => this.addMinutes(30)}
+                            disabled={this.state.timerExtensionUpdating}
+                          >
+                            +30 min
+                          </button>
+                        </div>}
                     </div>
                   </label>
                 </div>
@@ -543,22 +553,23 @@ class BleJouleView extends React.Component<BleJouleViewProps, any> {
     return Math.max(0, data.timeRemaining - Math.floor((Date.now() - this.state.dataReceivedAt) / 1000))
   }
 
-  private addFiveMinutes = () => {
+  private addMinutes = (minutes: number) => {
     // Apply each press locally first so the timer remains responsive. A running
     // device timer is synchronized after the user's presses settle.
     const timerIsRunning = this.state.timerEndsAt > 0
     const currentSeconds = timerIsRunning ? this.remainingTimerSeconds() : this.state.pendingTimerSeconds
     if (currentSeconds <= 0) return
 
-    const timerDuration = (this.state.timerDuration || currentSeconds) + (5 * 60)
-    const nextTimerSeconds = currentSeconds + (5 * 60)
+    const additionalSeconds = minutes * 60
+    const timerDuration = (this.state.timerDuration || currentSeconds) + additionalSeconds
+    const nextTimerSeconds = currentSeconds + additionalSeconds
     this.setState({
       cookTime: String(Math.ceil(timerDuration / 60)),
       timerDuration,
       timerEndsAt: timerIsRunning ? Date.now() + (nextTimerSeconds * 1000) : 0,
       pendingTimerSeconds: timerIsRunning ? 0 : nextTimerSeconds,
       error: "",
-      status: timerIsRunning ? "Added 5 minutes. Updating Joule shortly." : "Added 5 minutes to the pending timer.",
+      status: timerIsRunning ? `Added ${minutes} minutes. Updating Joule shortly.` : `Added ${minutes} minutes to the pending timer.`,
     }, () => {
       if (timerIsRunning && !this.state.developerMode) this.queueTimerExtensionUpdate()
     })
@@ -591,7 +602,7 @@ class BleJouleView extends React.Component<BleJouleViewProps, any> {
       await this.client.setTimer(remainingSeconds)
       this.setState({
         error: "",
-        status: "Added 5 minutes to the timer.",
+        status: "Timer updated.",
         timerEndsAt: Date.now() + (remainingSeconds * 1000),
       })
     } catch (error) {

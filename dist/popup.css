@@ -845,8 +845,13 @@ body, button, input {
   min-width: 0;
 }
 
-.timer-add-button {
+.timer-add-actions {
   margin-left: auto;
+  display: flex;
+  gap: 8px;
+}
+
+.timer-add-button {
   padding: 8px 12px;
 }
 
