@@ -220,7 +220,6 @@ class BleJouleView extends React.Component<BleJouleViewProps, any> {
     const timerIsPending = isCooking && this.state.pendingTimerSeconds > 0
     const displayedTimerSeconds = hasTimer ? timeRemaining : timerIsPending ? this.state.pendingTimerSeconds : 0
     const timerProgress = hasTimer || timerIsPending ? Math.min(1, displayedTimerSeconds / timerDuration) : 1
-    const timerCircumference = 439.8
     const selectedTemperature = parseFloat(this.state.setPoint)
     const targetTemperature = this.state.isCelsius ? selectedTemperature : (selectedTemperature - 32) / 1.8
     const appliedTargetTemperature = isCooking && this.state.activeSetPoint !== null
@@ -378,28 +377,27 @@ class BleJouleView extends React.Component<BleJouleViewProps, any> {
 
               <section className="panel timer-panel">
                 <div className="panel-content dashboard-card-text">
-                  <p className="panel-label">Cook timer</p>
-                  <div className={`cook-timer ${hasTimer ? "counting" : "solid"} ${timerIsPending ? "paused" : ""}`}>
-                    <svg className="cook-timer-ring" viewBox="0 0 160 160" aria-hidden="true">
-                      <circle className="cook-timer-track" cx="80" cy="80" r="70" />
-                      <circle
-                        className="cook-timer-progress"
-                        cx="80"
-                        cy="80"
-                        r="70"
-                        style={{
-                          strokeDasharray: timerCircumference,
-                          strokeDashoffset: timerCircumference * (1 - timerProgress),
-                        }}
-                      />
-                    </svg>
-                    <div className="cook-timer-content">
-                      <strong>{hasTimer || timerIsPending ? this.formatDuration(displayedTimerSeconds) : "--:--"}</strong>
+                  <div className="at-temperature-content">
+                    <div>
+                      <p className="panel-label">Cook timer</p>
+                      <p className="at-temperature-detail">
+                        {hasTimer ? "remaining" : timerIsPending ? "Starts when the water reaches the target" : isCooking ? "No timer set" : "Start a cook to add a timer"}
+                      </p>
                     </div>
+                    <strong className="at-temperature-reading">
+                      {hasTimer || timerIsPending ? this.formatDuration(displayedTimerSeconds) : "--:--"}
+                    </strong>
                   </div>
-                  <p className="timer-detail">
-                    {hasTimer ? "remaining" : timerIsPending ? "Starts when the water reaches the target" : isCooking ? "No timer set" : "Start a cook to add a timer"}
-                  </p>
+
+                  {(hasTimer || timerIsPending) && (
+                    <div className={`linear-timer-track ${hasTimer ? "counting" : "solid"} ${timerIsPending ? "paused" : ""}`}>
+                      <div 
+                        className="linear-timer-progress" 
+                        style={{ width: `${timerProgress * 100}%` }}
+                      ></div>
+                    </div>
+                  )}
+
                   <label className="setting-field timer-setting">
                     <span>Set timer <em>Optional</em></span>
                     <div className="timer-input-row">

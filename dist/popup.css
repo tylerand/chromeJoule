@@ -370,70 +370,28 @@ body {
   color: #b0c1bd;
 }
 
-.cook-timer {
-  height: 138px;
-  margin: 16px auto 0;
-  max-width: 138px;
-  position: relative;
+.linear-timer-track {
+  background: #e0e7e4;
+  border-radius: 4px;
+  height: 8px;
+  margin: 16px 0;
+  overflow: hidden;
   width: 100%;
 }
 
-.cook-timer-ring {
+.linear-timer-progress {
+  background: #e76f51;
+  border-radius: 4px;
   height: 100%;
-  transform: rotate(-90deg);
-  width: 100%;
+  transition: width 900ms linear;
 }
 
-.cook-timer-track,
-.cook-timer-progress {
-  fill: none;
-  stroke-width: 8;
-}
-
-.cook-timer-track {
-  stroke: #e0e7e4;
-}
-
-.cook-timer-progress {
-  stroke: #e76f51;
-  stroke-linecap: round;
-  transition: stroke-dashoffset 900ms linear;
-}
-
-.cook-timer.solid .cook-timer-progress {
-  stroke-dasharray: 439.8;
-  stroke-dashoffset: 0;
+.linear-timer-track.solid .linear-timer-progress {
   opacity: 0.16;
 }
 
-.cook-timer.paused .cook-timer-progress {
+.linear-timer-track.paused .linear-timer-progress {
   opacity: 0.6;
-}
-
-.cook-timer-content {
-  align-items: center;
-  display: flex;
-  flex-direction: column;
-  inset: 0;
-  justify-content: center;
-  position: absolute;
-  text-align: center;
-}
-
-.timer-detail {
-  color: #6c7975;
-  font-size: 13px;
-  line-height: 1.4;
-  margin: 10px 0 0;
-  text-align: center;
-}
-
-.cook-timer-content strong {
-  font-size: 30px;
-  font-variant-numeric: tabular-nums;
-  font-weight: 500;
-  letter-spacing: -0.04em;
-  line-height: 1;
 }
 
 .at-temperature-reading {
@@ -473,7 +431,9 @@ body {
 }
 
 .timer-setting {
+  border-top: 1px solid #dde5e2;
   margin-top: auto;
+  padding-top: 12px;
 }
 
 .setting-field > span {
@@ -575,16 +535,18 @@ body {
   font-weight: 700 !important;
 }
 
-.controller.dark .cook-timer-track {
-  stroke: #334340;
+.controller.dark .linear-timer-track {
+  background: #334340;
 }
 
-.controller.dark .cook-timer-progress {
-  stroke: #4cc3e8;
+.controller.dark .linear-timer-progress {
+  background: #4cc3e8;
 }
 
-.controller.dark .cook-timer-content small,
-.controller.dark .timer-detail,
+.controller.dark .timer-setting {
+  border-top-color: #334340;
+}
+
 .controller.dark .setting-field > span {
   color: #b0c1bd;
 }
@@ -672,11 +634,6 @@ body {
     align-items: flex-start;
     flex-direction: column;
     gap: 8px;
-  }
-
-  .cook-timer {
-    height: 138px;
-    max-width: 138px;
   }
 }
 
