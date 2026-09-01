@@ -19,6 +19,7 @@ class BleJouleView extends React.Component<BleJouleViewProps, any> {
     status: "Connect directly to a nearby Joule over Bluetooth.",
     connected: false,
     connecting: false,
+    developerMode: false,
     setPoint: "",
     cookTime: "",
     isCelsius: false,
@@ -30,6 +31,9 @@ class BleJouleView extends React.Component<BleJouleViewProps, any> {
     dataReceivedAt: 0,
     timerDuration: 0,
     timerEndsAt: 0,
+    pendingTimerSeconds: 0,
+    timerStarting: false,
+    timerStartFailed: false,
     activeSetPoint: null,
     timeAtTemperatureStartedAt: 0,
     timeAtTemperaturePending: false,
@@ -39,9 +43,12 @@ class BleJouleView extends React.Component<BleJouleViewProps, any> {
 
   public componentDidMount() {
     // BLE telemetry is refreshed less often than the displayed clocks.
-    this.clockInterval = window.setInterval(() => this.setState({ now: Date.now() }), 1000)
+    this.clockInterval = window.setInterval(() => {
+      this.advanceMockCook()
+      this.setState({ now: Date.now() })
+    }, 1000)
     this.temperatureRefreshInterval = window.setInterval(() => {
-      if (this.state.connected && !this.state.starting) {
+      if (this.state.connected && !this.state.developerMode && !this.state.starting) {
         this.client.refreshLiveData().catch((error) => console.warn("Could not refresh Joule temperature.", error))
       }
     }, 20000)
@@ -75,6 +82,9 @@ class BleJouleView extends React.Component<BleJouleViewProps, any> {
           dataReceivedAt: 0,
           timerDuration: 0,
           timerEndsAt: 0,
+          pendingTimerSeconds: 0,
+          timerStarting: false,
+          timerStartFailed: false,
           activeSetPoint: null,
           timeAtTemperatureStartedAt: 0,
           timeAtTemperaturePending: false,
@@ -102,14 +112,21 @@ class BleJouleView extends React.Component<BleJouleViewProps, any> {
       this.setState({ starting: false, error: "Enter a cook time from 1 to 1,440 minutes." })
       return
     }
+    if (this.state.developerMode) {
+      this.startMockProgram(setPoint, cookTime)
+      return
+    }
 
     try {
-      const timed = await this.client.startProgram(setPoint, cookTime)
+      const startsTimerImmediately = cookTime > 0 && this.canStartTimer(setPoint)
+      const timed = await this.client.startProgram(setPoint, startsTimerImmediately ? cookTime : 0)
       this.setState({
         error: "",
-        status: timed ? "Timed cook started." : "Cook started without a device timer.",
-        timerDuration: timed ? cookTime : 0,
+        status: timed ? "Timed cook started." : cookTime > 0 ? "Cook started. The timer will begin at the target temperature." : "Cook started without a device timer.",
+        timerDuration: cookTime,
         timerEndsAt: timed ? Date.now() + (cookTime * 1000) : 0,
+        pendingTimerSeconds: timed ? 0 : cookTime,
+        timerStartFailed: false,
         activeSetPoint: setPoint,
         timeAtTemperatureStartedAt: 0,
         timeAtTemperaturePending: true,
@@ -123,6 +140,23 @@ class BleJouleView extends React.Component<BleJouleViewProps, any> {
   }
 
   public stop = async () => {
+    if (this.state.developerMode) {
+      this.setState({
+        data: this.mockData(0),
+        error: "",
+        status: "Mock cook stopped.",
+        timerDuration: 0,
+        timerEndsAt: 0,
+        pendingTimerSeconds: 0,
+        timerStarting: false,
+        timerStartFailed: false,
+        activeSetPoint: null,
+        timeAtTemperatureStartedAt: 0,
+        timeAtTemperaturePending: false,
+        targetTemperaturePhaseObserved: false,
+      })
+      return
+    }
     this.setState({ starting: true, error: "" })
     try {
       await this.client.stopProgram()
@@ -149,24 +183,15 @@ class BleJouleView extends React.Component<BleJouleViewProps, any> {
       this.setState({ error: "Enter a cook time from 1 to 1,440 minutes." })
       return
     }
-    if (this.currentCookPhase() !== "Cooking" && !window.confirm(
-      "The device timer will begin immediately, but the water has not reached the target temperature yet. Start the timer anyway?",
-    )) return
-
-    this.setState({ starting: true, status: "Restarting cook with timer...", error: "" })
-    try {
-      const timed = await this.client.setTimer(cookTime)
-      this.setState({
-        error: timed ? "" : "Joule restarted, but did not accept the device timer.",
-        status: timed ? "Timed cook started." : "Cook restarted without a device timer.",
-        timerDuration: timed ? cookTime : 0,
-        timerEndsAt: timed ? Date.now() + (cookTime * 1000) : 0,
-      })
-    } catch (error) {
-      this.setState({ error: error.message || String(error) })
-    } finally {
-      this.setState({ starting: false })
-    }
+    const startsTimerImmediately = this.canStartTimer(this.state.activeSetPoint)
+    this.setState({
+      error: "",
+      status: startsTimerImmediately ? "Starting timer at the target temperature..." : "Timer saved. It will begin at the target temperature.",
+      timerDuration: cookTime,
+      timerEndsAt: 0,
+      pendingTimerSeconds: cookTime,
+      timerStartFailed: false,
+    })
   }
 
   public render() {
@@ -177,10 +202,11 @@ class BleJouleView extends React.Component<BleJouleViewProps, any> {
       ? Math.max(0, Math.ceil((this.state.timerEndsAt - this.state.now) / 1000))
       : data ? Math.max(0, data.timeRemaining - Math.floor((this.state.now - this.state.dataReceivedAt) / 1000)) : 0
     const timerDuration = this.state.timerDuration || (data && data.cookTime) || 0
-    const hasTimer = isCooking && timerDuration > 0
-    const timerProgress = hasTimer ? Math.min(1, timeRemaining / timerDuration) : 1
+    const hasTimer = isCooking && timerDuration > 0 && this.state.pendingTimerSeconds === 0
+    const timerIsPending = isCooking && this.state.pendingTimerSeconds > 0
+    const displayedTimerSeconds = hasTimer ? timeRemaining : timerIsPending ? this.state.pendingTimerSeconds : 0
+    const timerProgress = hasTimer || timerIsPending ? Math.min(1, displayedTimerSeconds / timerDuration) : 1
     const timerCircumference = 439.8
-    const unit = this.state.isCelsius ? "C" : "F"
     const selectedTemperature = parseFloat(this.state.setPoint)
     const targetTemperature = this.state.isCelsius ? selectedTemperature : (selectedTemperature - 32) / 1.8
     const appliedTargetTemperature = isCooking && this.state.activeSetPoint !== null
@@ -204,16 +230,28 @@ class BleJouleView extends React.Component<BleJouleViewProps, any> {
             <p className="eyebrow">Bluetooth sous vide controller</p>
             <h1>Chrome Joule</h1>
           </div>
-          <button
-            className={`theme-toggle ${this.props.darkMode ? "dark" : "light"}`}
-            type="button"
-            onClick={this.props.onToggleDarkMode}
-            aria-label={`Switch to ${this.props.darkMode ? "light" : "dark"} mode`}
-          >
-            <span className="theme-toggle-track">
-              <span className="theme-toggle-thumb">{this.props.darkMode ? "☾" : "☀"}</span>
-            </span>
-          </button>
+          <div className="header-controls">
+            <button
+              className={`developer-toggle ${this.state.developerMode ? "enabled" : ""}`}
+              type="button"
+              role="switch"
+              aria-checked={this.state.developerMode}
+              onClick={this.toggleDeveloperMode}
+            >
+              <span>Developer mode</span>
+              <span className="developer-toggle-track"><span /></span>
+            </button>
+            <button
+              className={`theme-toggle ${this.props.darkMode ? "dark" : "light"}`}
+              type="button"
+              onClick={this.props.onToggleDarkMode}
+              aria-label={`Switch to ${this.props.darkMode ? "light" : "dark"} mode`}
+            >
+              <span className="theme-toggle-track">
+                <span className="theme-toggle-thumb">{this.props.darkMode ? "☾" : "☀"}</span>
+              </span>
+            </button>
+          </div>
         </header>
         {this.state.error &&
           <Card className="status-banner">
@@ -254,16 +292,19 @@ class BleJouleView extends React.Component<BleJouleViewProps, any> {
                     <p className="eyebrow">Joule is connected</p>
                     <h2>{phase}</h2>
                   </div>
-                  <span className={`state-pill ${isCooking ? "active" : ""}`}>
-                    {isCooking ? "Cook in progress" : "Ready"}
-                  </span>
+                  <div className="connection-actions">
+                    <span className={`state-pill ${isCooking ? "active" : ""}`}>
+                      {isCooking ? "Cook in progress" : "Ready"}
+                    </span>
+                    <FlatButton label="Disconnect" onClick={this.disconnect} />
+                  </div>
                 </div>
                 <p className="status-detail">{this.state.status}</p>
               </CardText>
             </Card>
 
             <div className="dashboard-grid">
-              <Card className="temperature-panel">
+              <Card className={`temperature-panel ${phase.toLowerCase()}`}>
                 <CardText className="dashboard-card-text">
                   <p className="panel-label">Live water temperature</p>
                   <div className="temperature-reading">
@@ -278,18 +319,52 @@ class BleJouleView extends React.Component<BleJouleViewProps, any> {
                       </span>}
                   </div>
                   <div className="temperature-summary">
-                    <span>Target</span>
-                    <b>{this.state.activeSetPoint !== null
-                      ? this.displayTemperature(this.state.activeSetPoint)
-                      : "Not set"}</b>
+                    <label className="setting-field">
+                      <span>Set temperature</span>
+                      <div>
+                        <input
+                          type="number"
+                          inputMode="decimal"
+                          value={this.state.setPoint}
+                          onChange={(event) => this.setState({ setPoint: event.target.value })}
+                          placeholder="Set temperature"
+                          aria-label="Target temperature"
+                        />
+                        <div className="unit-switcher" role="group" aria-label="Temperature unit">
+                          <button
+                            type="button"
+                            className={this.state.isCelsius ? "active" : ""}
+                            onClick={() => this.setTemperatureUnit(true)}
+                            aria-pressed={this.state.isCelsius}
+                          >
+                            °C
+                          </button>
+                          <button
+                            type="button"
+                            className={!this.state.isCelsius ? "active" : ""}
+                            onClick={() => this.setTemperatureUnit(false)}
+                            aria-pressed={!this.state.isCelsius}
+                          >
+                            °F
+                          </button>
+                        </div>
+                      </div>
+                    </label>
                   </div>
                 </CardText>
+                <CardActions className="panel-actions">
+                  {!isCooking &&
+                    <RaisedButton label={this.state.starting ? "Starting..." : "Start preheat"} onClick={this.start} disabled={this.state.starting} primary />}
+                  {isCooking &&
+                    <RaisedButton label={this.state.starting ? "Updating..." : "Update temperature"} onClick={this.updateTemperature} disabled={this.state.starting || !canUpdateTemperature} primary />}
+                  {isCooking && <FlatButton label="Stop cook" onClick={this.stop} disabled={this.state.starting} secondary />}
+                </CardActions>
               </Card>
 
               <Card className="timer-panel">
                 <CardText className="dashboard-card-text">
                   <p className="panel-label">Cook timer</p>
-                  <div className={`cook-timer ${hasTimer ? "counting" : "solid"}`}>
+                  <div className={`cook-timer ${hasTimer ? "counting" : "solid"} ${timerIsPending ? "paused" : ""}`}>
                     <svg className="cook-timer-ring" viewBox="0 0 160 160" aria-hidden="true">
                       <circle className="cook-timer-track" cx="80" cy="80" r="70" />
                       <circle
@@ -304,77 +379,52 @@ class BleJouleView extends React.Component<BleJouleViewProps, any> {
                       />
                     </svg>
                     <div className="cook-timer-content">
-                      <strong>{hasTimer ? this.formatDuration(timeRemaining) : "--:--"}</strong>
+                      <strong>{hasTimer || timerIsPending ? this.formatDuration(displayedTimerSeconds) : "--:--"}</strong>
                     </div>
                   </div>
                   <p className="timer-detail">
-                    {hasTimer ? "remaining" : isCooking ? "No timer set" : "Start a cook to add a timer"}
+                    {hasTimer ? "remaining" : timerIsPending ? "Starts when the water reaches the target" : isCooking ? "No timer set" : "Start a cook to add a timer"}
                   </p>
+                  <label className="setting-field timer-setting">
+                    <span>Set timer <em>Optional</em></span>
+                    <div>
+                      <input
+                        type="number"
+                        inputMode="numeric"
+                        min="1"
+                        value={this.state.cookTime}
+                        onChange={(event) => this.setState({ cookTime: event.target.value })}
+                        placeholder="Add a timer"
+                        aria-label="Cook time in minutes"
+                      />
+                      <b>min</b>
+                    </div>
+                  </label>
                 </CardText>
+                {isCooking &&
+                  <CardActions className="panel-actions">
+                    <RaisedButton label={this.state.timerStarting ? "Starting timer..." : timerIsPending || hasTimer ? "Update timer" : "Start timer"} onClick={this.setTimer} disabled={this.state.starting || this.state.timerStarting} primary />
+                  </CardActions>}
               </Card>
 
               <Card className="at-temperature-panel">
                 <CardText className="dashboard-card-text">
-                  <p className="panel-label">Time at temperature</p>
-                  <strong className="at-temperature-reading">
-                    {this.state.timeAtTemperatureStartedAt > 0 ? this.formatDuration(timeAtTemperature) : "--:--"}
-                  </strong>
-                  <p className="at-temperature-detail">
-                    {this.state.timeAtTemperatureStartedAt > 0
-                      ? "Since the water reached the target"
-                      : isCooking ? "Starts when the water reaches the target" : "Starts during an active cook"}
-                  </p>
+                  <div className="at-temperature-content">
+                    <div>
+                      <p className="panel-label">Time at temperature</p>
+                      <p className="at-temperature-detail">
+                        {this.state.timeAtTemperatureStartedAt > 0
+                          ? "Since the water reached the target"
+                          : isCooking ? "Starts when the water reaches the target" : "Starts during an active cook"}
+                      </p>
+                    </div>
+                    <strong className="at-temperature-reading">
+                      {this.state.timeAtTemperatureStartedAt > 0 ? this.formatDuration(timeAtTemperature) : "--:--"}
+                    </strong>
+                  </div>
                 </CardText>
               </Card>
 
-              <Card className="controls-panel">
-                <CardText className="dashboard-card-text">
-                  <p className="panel-label">Cook controls</p>
-                  <div className="cook-settings">
-                    <label className="setting-field">
-                      <span>Set temperature</span>
-                      <div>
-                        <input
-                          type="number"
-                          inputMode="decimal"
-                          value={this.state.setPoint}
-                          onChange={(event) => this.setState({ setPoint: event.target.value })}
-                          placeholder="Set temperature"
-                          aria-label="Target temperature"
-                        />
-                        <button type="button" className="unit-button" onClick={this.toggleTemperatureUnit}>
-                          °{unit}
-                        </button>
-                      </div>
-                    </label>
-                    <label className="setting-field">
-                      <span>Set timer <em>Optional</em></span>
-                      <div>
-                        <input
-                          type="number"
-                          inputMode="numeric"
-                          min="1"
-                          value={this.state.cookTime}
-                          onChange={(event) => this.setState({ cookTime: event.target.value })}
-                          placeholder="Add a timer"
-                          aria-label="Cook time in minutes"
-                        />
-                        <b>min</b>
-                      </div>
-                    </label>
-                  </div>
-                </CardText>
-                <CardActions className="cook-actions">
-                  {!isCooking &&
-                    <RaisedButton label={this.state.starting ? "Starting..." : "Start preheat"} onClick={this.start} disabled={this.state.starting} primary />}
-                  {isCooking &&
-                    <RaisedButton label={this.state.starting ? "Setting timer..." : hasTimer ? "Update timer" : "Start timer"} onClick={this.setTimer} disabled={this.state.starting} primary />}
-                  {isCooking &&
-                    <RaisedButton label={this.state.starting ? "Updating..." : "Update temperature"} onClick={this.updateTemperature} disabled={this.state.starting || !canUpdateTemperature} primary />}
-                  {isCooking && <RaisedButton label="Stop cook" onClick={this.stop} disabled={this.state.starting} secondary />}
-                  <FlatButton label="Disconnect" onClick={this.disconnect} />
-                </CardActions>
-              </Card>
             </div>
           </main>}
       </div>
@@ -417,9 +467,9 @@ class BleJouleView extends React.Component<BleJouleViewProps, any> {
     return "Cooking"
   }
 
-  private toggleTemperatureUnit = () => {
+  private setTemperatureUnit = (isCelsius: boolean) => {
+    if (this.state.isCelsius === isCelsius) return
     const value = parseFloat(this.state.setPoint)
-    const isCelsius = !this.state.isCelsius
     if (!isFinite(value)) {
       this.setState({ isCelsius })
       return
@@ -437,16 +487,35 @@ class BleJouleView extends React.Component<BleJouleViewProps, any> {
     }
 
     const data: JouleData = this.state.data
-    const cookTime = data && data.timeRemaining > 0
+    const cookTime = this.state.timerEndsAt > 0
       ? this.remainingTimerSeconds()
-      : 0
+      : this.state.pendingTimerSeconds
+    const startsTimerImmediately = cookTime > 0 && this.canStartTimer(setPoint)
+    if (this.state.developerMode) {
+      this.setState({
+        data: this.mockData(1, setPoint, startsTimerImmediately ? cookTime : 0),
+        activeSetPoint: setPoint,
+        timerDuration: cookTime > 0 ? this.state.timerDuration || cookTime : 0,
+        timerEndsAt: startsTimerImmediately ? Date.now() + (cookTime * 1000) : 0,
+        pendingTimerSeconds: startsTimerImmediately ? 0 : cookTime,
+        timerStartFailed: false,
+        timeAtTemperatureStartedAt: 0,
+        timeAtTemperaturePending: true,
+        targetTemperaturePhaseObserved: false,
+        error: "",
+        status: "Mock target temperature updated.",
+      })
+      return
+    }
     this.setState({ starting: true, status: "Updating target temperature...", error: "" })
     try {
-      const timed = await this.client.updateSetPoint(setPoint, cookTime)
+      const timed = await this.client.updateSetPoint(setPoint, startsTimerImmediately ? cookTime : 0)
       this.setState({
         activeSetPoint: setPoint,
-        timerDuration: timed ? cookTime : 0,
+        timerDuration: cookTime > 0 ? this.state.timerDuration || cookTime : 0,
         timerEndsAt: timed ? Date.now() + (cookTime * 1000) : 0,
+        pendingTimerSeconds: timed ? 0 : cookTime,
+        timerStartFailed: false,
         timeAtTemperatureStartedAt: 0,
         timeAtTemperaturePending: true,
         targetTemperaturePhaseObserved: false,
@@ -489,6 +558,13 @@ class BleJouleView extends React.Component<BleJouleViewProps, any> {
       timeAtTemperatureStartedAt: Date.now(),
       timeAtTemperaturePending: false,
     })
+
+    if (
+      this.state.pendingTimerSeconds > 0 &&
+      !this.state.timerStarting &&
+      !this.state.timerStartFailed &&
+      this.canStartTimer(this.state.activeSetPoint)
+    ) this.startPendingTimer()
   }
 
   private cookPhaseForState(state) {
@@ -506,7 +582,110 @@ class BleJouleView extends React.Component<BleJouleViewProps, any> {
     return this.cookPhaseForState(this.state)
   }
 
+  private canStartTimer(setPoint: number) {
+    const data: JouleData = this.state.data
+    // Match the Cook phase threshold so both clocks begin from the same point.
+    return data && setPoint !== null && data.bathTemp >= setPoint - 0.3
+  }
+
+  private startPendingTimer = async () => {
+    const cookTime = this.state.pendingTimerSeconds
+    if (cookTime <= 0) return
+
+    this.setState({ timerStarting: true, error: "" })
+    try {
+      if (!this.state.developerMode) await this.client.setTimer(cookTime)
+      this.setState({
+        data: this.state.developerMode ? this.mockData(1, this.state.activeSetPoint, cookTime) : this.state.data,
+        status: this.state.developerMode ? "Mock timer started." : "Timer started at the target temperature.",
+        timerDuration: this.state.timerDuration || cookTime,
+        timerEndsAt: Date.now() + (cookTime * 1000),
+        pendingTimerSeconds: 0,
+        timerStartFailed: false,
+      })
+    } catch (error) {
+      this.setState({ error: error.message || String(error), timerStartFailed: true })
+    } finally {
+      this.setState({ timerStarting: false })
+    }
+  }
+
+  private toggleDeveloperMode = () => {
+    if (this.state.developerMode) {
+      this.setState({
+        developerMode: false,
+        connected: false,
+        data: null,
+        setPoint: "",
+        cookTime: "",
+        timerDuration: 0,
+        timerEndsAt: 0,
+        activeSetPoint: null,
+        timeAtTemperatureStartedAt: 0,
+        timeAtTemperaturePending: false,
+        targetTemperaturePhaseObserved: false,
+        status: "Connect directly to a nearby Joule over Bluetooth.",
+      })
+      return
+    }
+
+    this.client.disconnect()
+    this.setState({
+      developerMode: true,
+      connected: true,
+      connecting: false,
+      data: this.mockData(0),
+      error: "",
+      status: "Developer mode: simulated Joule connected.",
+    })
+  }
+
+  private startMockProgram(setPoint: number, cookTime: number) {
+    const startsTimerImmediately = cookTime > 0 && this.canStartTimer(setPoint)
+    this.setState({
+      data: this.mockData(1, setPoint, startsTimerImmediately ? cookTime : 0),
+      error: "",
+      status: startsTimerImmediately ? "Mock timed cook started." : cookTime > 0 ? "Mock cook started. The timer will begin at the target temperature." : "Mock cook started.",
+      timerDuration: cookTime,
+      timerEndsAt: startsTimerImmediately ? Date.now() + (cookTime * 1000) : 0,
+      pendingTimerSeconds: startsTimerImmediately ? 0 : cookTime,
+      timerStartFailed: false,
+      activeSetPoint: setPoint,
+      timeAtTemperatureStartedAt: 0,
+      timeAtTemperaturePending: true,
+      targetTemperaturePhaseObserved: false,
+      starting: false,
+    })
+  }
+
+  private advanceMockCook() {
+    const data: JouleData = this.state.data
+    const setPoint = this.state.activeSetPoint
+    if (!this.state.developerMode || !data || setPoint === null || data.programStep === 0) return
+
+    const difference = setPoint - data.bathTemp
+    const bathTemp = Math.abs(difference) <= 2 ? setPoint : data.bathTemp + (difference > 0 ? 2 : -2)
+    this.setState({ data: { ...data, bathTemp, sequenceNumber: data.sequenceNumber + 1 }, dataReceivedAt: Date.now() })
+  }
+
+  private mockData(programStep: number, setPoint?: number, cookTime = 0): JouleData {
+    const existingData: JouleData = this.state.data
+    return {
+      bathTemp: existingData ? existingData.bathTemp : 21,
+      programStep,
+      timeRemaining: cookTime,
+      feedId: 1,
+      sequenceNumber: existingData ? existingData.sequenceNumber + 1 : 1,
+      setPoint,
+      cookTime,
+    }
+  }
+
   private disconnect = () => {
+    if (this.state.developerMode) {
+      this.toggleDeveloperMode()
+      return
+    }
     this.client.disconnect()
   }
 
