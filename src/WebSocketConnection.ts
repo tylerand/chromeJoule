@@ -1,5 +1,5 @@
-const { Q, CirculatorSDK } = require("exports-loader?window!./bundle.js")
-import * as EventEmitter from "events"
+import { Q, CirculatorSDK } from "./circulatorSdk"
+import { EventEmitter } from "events"
 import * as _ from "underscore"
 import authenticationService from "./authenticationService"
 import { connectionProvidersConfig, connectionStates, disconnectReasons } from "./constants"

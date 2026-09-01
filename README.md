@@ -7,14 +7,14 @@ Click the image above for a youtube video of the extension in action. Pretty str
 [this](https://medium.com/@_dennisli/reverse-engineering-the-chefsteps-joule-and-making-a-chrome-extension-fa09c78bd87f))
 
 Currently, the extension supports the following:
-* Starting manual cook programs (Both the temperature and optionally, the duration)
-* Stopping programs
-* Input validation (e.g. making sure the temperature is in bounds)
-* Live updates (current temperature, preheating, and error messages e.g. bad connection or login issues)
+* Connecting directly to a nearby Joule over Bluetooth
+* Starting and stopping manual cook programs with an optional device-side timer
+* Setting a timer during preheating or an active cook by restarting at the same target temperature
+* Live water-temperature and cooking-state updates
 
-## Installation 
-You can download it from the chrome app store
-[here](https://chrome.google.com/webstore/detail/chrome-joule/lifggfcoblmpbobfobpfhhjkiempjckn).
+## Installation
+The original Chrome Web Store listing is no longer available. Build the extension
+locally and load `dist/` as an unpacked extension.
 
 ## Development
 If you’re interested in a blog post I wrote about the development process, see <>
@@ -23,11 +23,25 @@ If you’re interested in a blog post I wrote about the development process, see
 
 ```
 $ npm install
-$ npm run watch
+$ npm run build
 ```
 To install:
-Navigate to `chrome://extensions` and make sure you have the developer menu enabled
-Load `dist/` as an unpacked extension
+Navigate to `chrome://extensions`, enable **Developer mode**, then use **Load
+unpacked** to select `dist/`. The extension is packaged as Manifest V3 and
+supports current Chrome releases.
+
+### Bluetooth pairing
+
+Click the extension icon to open the controller in a dedicated browser tab,
+then click **Connect Joule** and select the Joule from Chrome's Bluetooth
+picker. On first connection, press the physical button on the Joule within 60
+seconds to authorize the extension. The extension stores that device-specific
+pairing key locally, so later connections do not need another button press.
+Close the Breville+ app or nRF Connect before connecting because the Joule
+supports one Bluetooth connection at a time.
+
+If Chrome cannot read the Joule advertiser data, copy its **Manufacturer Data**
+value from nRF Connect into the optional controller field before connecting.
 
 Note: This project uses typescript, so I highly recommend using VSCode for development.
 

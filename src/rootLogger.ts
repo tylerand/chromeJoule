@@ -1,4 +1,4 @@
-const { CSLogging, Uuid } = require("exports-loader?window!./bundle.js")
+import { CSLogging, Uuid } from "./circulatorSdk"
 
 export default CSLogging.getRootLogger().child({
   appSessionId: Uuid.v4(),

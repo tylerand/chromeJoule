@@ -1,30 +1,19 @@
 {
-  "manifest_version": 2,
+  "manifest_version": 3,
 
-  "name": "Chrome Joule",
-  "description": "Chrome app to control Joule",
-  "version": "0.0.3",
+  "name": "Chrome Joule V2",
+  "description": "Unofficial Bluetooth controller for a ChefSteps Joule",
+  "version": "1.1.0",
 
-  "browser_action": {
-    "default_icon": "icon.png",
-    "default_popup": "popup.html"
+  "action": {
+    "default_icon": "icon.png"
   },
-
-  "content_scripts": [
-      {
-          "matches": ["<all_urls>"],
-          "js": ["js/content_script.js"]
-      }
-  ],
 
   "background": {
-    "scripts": ["js/background.js"],
-    "persistent": true
+    "service_worker": "js/background.js"
   },
 
-  "permissions": [
-    "http://www.chefsteps.com/",
-    "storage",
-    "cookies"
-  ]
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'self'"
+  }
 }

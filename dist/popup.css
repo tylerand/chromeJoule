@@ -1,9 +1,546 @@
+* {
+  box-sizing: border-box;
+}
+
 body {
-  width: 400px;
-  min-height: 100px;
+  margin: 0;
+  min-width: 400px;
+  min-height: 100vh;
+}
+
+#content,
+.controller {
+  min-height: 100vh;
+}
+
+.controller {
+  padding: 32px;
+}
+
+.controller.dark {
+  background: #101719;
+}
+
+.controller.light {
+  background: #f2f5f4;
+}
+
+.content {
+  margin: 0 auto;
+  max-width: 1160px;
+}
+
+.controller-header {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 28px;
+}
+
+.eyebrow,
+.panel-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  margin: 0 0 6px;
+  text-transform: uppercase;
+}
+
+.controller-header h1 {
+  color: #1e2927;
+  font-size: 32px;
+  font-weight: 600;
+  letter-spacing: -0.03em;
+  line-height: 1;
+  margin: 0;
+}
+
+.controller.dark .controller-header h1,
+.controller.dark .theme-toggle {
+  color: #f5f8f7;
+}
+
+.controller.dark .eyebrow,
+.controller.dark .panel-label {
+  color: #8ea3a0;
+}
+
+.theme-toggle {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  color: inherit;
+  cursor: pointer;
+  display: flex;
+  font: inherit;
+  padding: 0;
+}
+
+.theme-toggle-track {
+  background: #d5e4df;
+  border-radius: 14px;
+  display: block;
+  height: 28px;
+  position: relative;
+  transition: background 180ms ease;
+  width: 54px;
+}
+
+.theme-toggle-thumb {
+  align-items: center;
+  background: #ed9d45;
+  border-radius: 50%;
+  color: #fff;
+  display: flex;
+  font-size: 15px;
+  height: 24px;
+  justify-content: center;
+  left: 2px;
+  line-height: 1;
+  position: absolute;
+  top: 2px;
+  transition: left 180ms ease, background 180ms ease;
+  width: 24px;
+}
+
+.theme-toggle.dark .theme-toggle-track {
+  background: #23404a;
+}
+
+.theme-toggle.dark .theme-toggle-thumb {
+  background: #4cc3e8;
+  left: 28px;
+}
+
+.theme-toggle:focus-visible {
+  outline: 2px solid #4cc3e8;
+  outline-offset: 4px;
+}
+
+.status-banner {
+  border-left: 4px solid #e76f51;
+  margin-bottom: 20px;
+}
+
+.status-banner-text {
+  color: #aa3e29;
+  padding-bottom: 16px;
+  padding-top: 16px;
+}
+
+.connection-card {
+  margin: 0 auto;
+  max-width: 620px;
+}
+
+.connection-status {
+  padding-bottom: 8px;
+}
+
+.connection-status h2,
+.status-heading h2 {
+  font-size: 28px;
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  margin: 0 0 8px;
+}
+
+.connection-status p,
+.status-detail {
+  color: #65716e;
+  margin: 0;
+}
+
+.controller.dark .connection-status p,
+.controller.dark .status-detail {
+  color: #adbfbb;
+}
+
+.cook-dashboard {
+  display: grid;
+  gap: 20px;
+}
+
+.dashboard-status .dashboard-card-text {
+  padding: 22px 26px !important;
+}
+
+.status-heading {
+  align-items: flex-start;
+  display: flex;
+  gap: 16px;
+  justify-content: space-between;
+}
+
+.state-pill {
+  background: #e5ece9;
+  border-radius: 999px;
+  color: #52625d;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 7px 11px;
+  white-space: nowrap;
+}
+
+.state-pill.active {
+  background: #d5f0e4;
+  color: #17704d;
+}
+
+.controller.dark .state-pill {
+  background: #2a3a38;
+  color: #b6c9c4;
+}
+
+.controller.dark .state-pill.active {
+  background: #174d3c;
+  color: #8de1ba;
+}
+
+.dashboard-grid {
+  display: grid;
+  gap: 20px;
+  grid-template-columns: minmax(0, 0.9fr) minmax(190px, 0.8fr) minmax(190px, 0.8fr) minmax(300px, 1.2fr);
+}
+
+.dashboard-grid > .temperature-panel,
+.dashboard-grid > .timer-panel,
+.dashboard-grid > .at-temperature-panel,
+.dashboard-grid > .controls-panel {
+  min-width: 0;
+}
+
+.temperature-panel {
+  grid-column: span 2;
+}
+
+.controls-panel {
+  grid-column: 1 / -1;
+}
+
+.temperature-panel .dashboard-card-text,
+.timer-panel .dashboard-card-text,
+.at-temperature-panel .dashboard-card-text,
+.controls-panel .dashboard-card-text {
+  padding: 26px !important;
+}
+
+.temperature-reading {
+  align-items: center;
+  display: flex;
+  font-size: clamp(42px, 5vw, 68px);
+  gap: 14px;
+  max-width: 100%;
+  margin: 32px 0 28px;
+  min-width: 0;
+}
+
+.temperature-reading strong {
+  font-size: 1em;
+  font-variant-numeric: tabular-nums;
+  font-weight: 500;
+  letter-spacing: -0.06em;
+  line-height: 1;
+  min-width: 0;
+}
+
+.temperature-direction {
+  flex: 0 0 auto;
+  font-size: 0.85em;
+  font-weight: 400;
+  line-height: 1;
+}
+
+.temperature-direction.up {
+  color: #d45c43;
+}
+
+.temperature-direction.down {
+  color: #3788b4;
+}
+
+.temperature-summary {
+  align-items: center;
+  border-top: 1px solid #dde5e2;
+  color: #6c7975;
+  display: flex;
+  font-size: 14px;
+  justify-content: space-between;
+  padding-top: 16px;
+}
+
+.temperature-summary b {
+  color: inherit;
+  font-size: 16px;
+}
+
+.controller.dark .temperature-summary {
+  border-color: #334340;
+  color: #b0c1bd;
+}
+
+.cook-timer {
+  height: 160px;
+  margin: 22px auto 0;
+  max-width: 160px;
+  position: relative;
+  width: 100%;
+}
+
+.cook-timer-ring {
+  height: 100%;
+  transform: rotate(-90deg);
+  width: 100%;
+}
+
+.cook-timer-track,
+.cook-timer-progress {
+  fill: none;
+  stroke-width: 10;
+}
+
+.cook-timer-track {
+  stroke: #e0e7e4;
+}
+
+.cook-timer-progress {
+  stroke: #e76f51;
+  stroke-linecap: round;
+  transition: stroke-dashoffset 900ms linear;
+}
+
+.cook-timer.solid .cook-timer-progress {
+  stroke-dasharray: 439.8;
+  stroke-dashoffset: 0;
+  opacity: 0.25;
+}
+
+.cook-timer-content {
+  align-items: center;
+  display: flex;
+  flex-direction: column;
+  inset: 0;
+  justify-content: center;
+  position: absolute;
+  text-align: center;
+}
+
+.timer-detail {
+  color: #6c7975;
+  font-size: 13px;
+  line-height: 1.4;
+  margin: 14px 0 0;
+  text-align: center;
+}
+
+.cook-timer-content strong {
+  font-size: 30px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 500;
+  letter-spacing: -0.04em;
+  line-height: 1;
+}
+
+.at-temperature-reading {
+  display: block;
+  font-size: 36px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 500;
+  letter-spacing: -0.04em;
+  line-height: 1;
+  margin: 37px 0 33px;
+}
+
+.at-temperature-detail {
+  border-top: 1px solid #dde5e2;
+  color: #6c7975;
+  font-size: 13px;
+  line-height: 1.45;
+  margin: 0;
+  padding-top: 16px;
+}
+
+.controller.dark .at-temperature-detail {
+  border-color: #334340;
+  color: #b0c1bd;
+}
+
+.cook-settings {
+  margin-top: 22px;
+}
+
+.setting-field {
+  display: block;
+  padding: 14px 0;
+}
+
+.setting-field + .setting-field {
+  border-top: 1px solid #dde5e2;
+}
+
+.setting-field > span {
+  color: #5d6b66;
+  display: block;
+  font-size: 13px;
+  font-weight: 700;
+  margin-bottom: 7px;
+}
+
+.setting-field em {
+  color: #899691;
+  font-size: 12px;
+  font-style: normal;
+  font-weight: normal;
+  margin-left: 5px;
+}
+
+.setting-field > div {
+  align-items: center;
+  display: flex;
+}
+
+.setting-field input {
+  background: transparent;
+  border: 0;
+  color: inherit;
+  font: inherit;
+  font-size: 25px;
+  font-variant-numeric: tabular-nums;
+  min-width: 0;
+  outline: none;
+  padding: 2px 0;
+  width: 100%;
+}
+
+.setting-field input::-webkit-inner-spin-button,
+.setting-field input::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.setting-field input[type="number"] {
+  -moz-appearance: textfield;
+}
+
+.setting-field input::placeholder {
+  color: #a2ada9;
+}
+
+.setting-field b,
+.unit-button {
+  color: #d45c43;
+  font-size: 15px;
+  margin-left: 8px;
+  white-space: nowrap;
+}
+
+.unit-button {
+  background: #f9e5df;
+  border: 0;
+  border-radius: 5px;
+  cursor: pointer;
+  font-weight: 700;
+  padding: 5px 7px;
+}
+
+.cook-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 4px 18px 20px !important;
+}
+
+.cook-actions > * {
+  margin: 0 !important;
+}
+
+.controller button,
+.controller button span {
+  font-weight: 700 !important;
+}
+
+.controller.dark .cook-timer-track {
+  stroke: #334340;
+}
+
+.controller.dark .cook-timer-progress {
+  stroke: #4cc3e8;
+}
+
+.controller.dark .cook-timer-content small,
+.controller.dark .timer-detail,
+.controller.dark .setting-field > span {
+  color: #b0c1bd;
+}
+
+.controller.dark .setting-field + .setting-field {
+  border-color: #334340;
+}
+
+.controller.dark .setting-field input {
+  color: #f5f8f7;
+}
+
+.controller.dark .setting-field input::placeholder {
+  color: #788a85;
+}
+
+.controller.dark .setting-field b,
+.controller.dark .unit-button {
+  color: #73d2ed;
+}
+
+.controller.dark .unit-button {
+  background: #1d3b45;
 }
 
 .loading-container {
+  margin: 0 auto;
+  max-width: 520px;
+  min-height: 100px;
   position: relative;
-  min-height: 100px
+}
+
+@media (max-width: 1050px) {
+  .dashboard-grid {
+    grid-template-columns: minmax(0, 1fr) minmax(280px, 1fr);
+  }
+
+  .temperature-panel,
+  .controls-panel {
+    grid-column: auto;
+  }
+}
+
+@media (max-width: 620px) {
+  .controller {
+    padding: 18px;
+  }
+
+  .controller-header {
+    margin-bottom: 20px;
+  }
+
+  .controller-header h1 {
+    font-size: 27px;
+  }
+
+  .dashboard-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .controls-panel {
+    grid-column: auto;
+  }
+
+  .status-heading {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .cook-timer {
+    height: 160px;
+    max-width: 160px;
+  }
 }
