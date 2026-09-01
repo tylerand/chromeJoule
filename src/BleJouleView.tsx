@@ -1,4 +1,4 @@
-import { Card, CardActions, CardText, CardTitle } from "material-ui/Card"
+import { Card, CardActions, CardText } from "material-ui/Card"
 import FlatButton from "material-ui/FlatButton"
 import RaisedButton from "material-ui/RaisedButton"
 import TextField from "material-ui/TextField"
@@ -38,6 +38,7 @@ class BleJouleView extends React.Component<BleJouleViewProps, any> {
   }
 
   public componentDidMount() {
+    // BLE telemetry is refreshed less often than the displayed clocks.
     this.clockInterval = window.setInterval(() => this.setState({ now: Date.now() }), 1000)
     this.temperatureRefreshInterval = window.setInterval(() => {
       if (this.state.connected && !this.state.starting) {
@@ -105,7 +106,6 @@ class BleJouleView extends React.Component<BleJouleViewProps, any> {
     try {
       const timed = await this.client.startProgram(setPoint, cookTime)
       this.setState({
-        starting: false,
         error: "",
         status: timed ? "Timed cook started." : "Cook started without a device timer.",
         timerDuration: timed ? cookTime : 0,
@@ -116,7 +116,7 @@ class BleJouleView extends React.Component<BleJouleViewProps, any> {
         targetTemperaturePhaseObserved: false,
       })
     } catch (error) {
-      this.setState({ starting: false, error: error.message || String(error) })
+      this.setState({ error: error.message || String(error) })
     } finally {
       this.setState({ starting: false })
     }
@@ -157,14 +157,13 @@ class BleJouleView extends React.Component<BleJouleViewProps, any> {
     try {
       const timed = await this.client.setTimer(cookTime)
       this.setState({
-        starting: false,
         error: timed ? "" : "Joule restarted, but did not accept the device timer.",
         status: timed ? "Timed cook started." : "Cook restarted without a device timer.",
         timerDuration: timed ? cookTime : 0,
         timerEndsAt: timed ? Date.now() + (cookTime * 1000) : 0,
       })
     } catch (error) {
-      this.setState({ starting: false, error: error.message || String(error) })
+      this.setState({ error: error.message || String(error) })
     } finally {
       this.setState({ starting: false })
     }
@@ -445,7 +444,6 @@ class BleJouleView extends React.Component<BleJouleViewProps, any> {
     try {
       const timed = await this.client.updateSetPoint(setPoint, cookTime)
       this.setState({
-        starting: false,
         activeSetPoint: setPoint,
         timerDuration: timed ? cookTime : 0,
         timerEndsAt: timed ? Date.now() + (cookTime * 1000) : 0,
@@ -456,7 +454,7 @@ class BleJouleView extends React.Component<BleJouleViewProps, any> {
         status: timed ? "Temperature and timer updated." : "Temperature updated.",
       })
     } catch (error) {
-      this.setState({ starting: false, error: error.message || String(error) })
+      this.setState({ error: error.message || String(error) })
     } finally {
       this.setState({ starting: false })
     }
@@ -471,6 +469,8 @@ class BleJouleView extends React.Component<BleJouleViewProps, any> {
   public componentDidUpdate(_previousProps, previousState) {
     const previousPhase = this.cookPhaseForState(previousState)
     const currentPhase = this.currentCookPhase()
+    // A target change must first produce a heating or cooling phase before its
+    // elapsed-at-temperature clock can start on the following Cooking phase.
     if (
       this.state.timeAtTemperaturePending &&
       !this.state.targetTemperaturePhaseObserved &&

@@ -36,7 +36,6 @@ export interface JouleData {
 
 interface DecodedMessage {
   type?: number
-  body?: Uint8Array
   data?: JouleData
   key?: Uint8Array
   result?: number
@@ -177,7 +176,6 @@ function decodeMessage(data: Uint8Array): DecodedMessage {
     if (entry.wireType !== 2 || typeof entry.value === "number") return
     if ([field.startKeyExchangeReply, field.submitKeyReply, field.startProgramReply, field.stopCirculatorReply].indexOf(entry.number) !== -1) {
       message.type = entry.number
-      message.body = entry.value
       decodeFields(entry.value).forEach((replyField) => {
         if (entry.number === field.startKeyExchangeReply && replyField.number === 1 && replyField.wireType === 2) message.key = replyField.value as Uint8Array
         if (
@@ -325,6 +323,8 @@ export default class JouleBleClient {
       await this.delay(500)
       await this.readResponse()
 
+      // Firmware revisions accept different request shapes, so try the smallest
+      // supported form before falling back to the more complete variants.
       const compactProgram = concat(
         floatField(1, setPoint),
         integerField(5, 0),
