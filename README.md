@@ -36,6 +36,10 @@ Close the Breville+ app, nRF Connect, and other Bluetooth clients before connect
 
 If Chrome cannot read the Joule advertiser data, enter its **Manufacturer Data** from nRF Connect under **Advanced** before connecting.
 
+Selecting **Disconnect** deliberately removes the saved pairing key after
+confirmation. The next connection will require you to press the Joule's top
+button to pair again.
+
 ## How it works
 
 The extension opens a browser-based controller and communicates with Joule's Bluetooth GATT service directly. `JouleBleClient` encodes the subset of the Joule protocol needed to pair, subscribe to live data, and control manual programs. `BleJouleView` renders the controller and derives the displayed cook phase, timer progress, and time-at-temperature from device telemetry.

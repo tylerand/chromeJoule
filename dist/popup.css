@@ -802,6 +802,17 @@ body, button, input {
   background: #fcece8;
 }
 
+.btn-disconnect {
+  background: transparent;
+  border-color: #dde5e2;
+  color: #52625d;
+  padding: 8px 12px;
+}
+
+.btn-disconnect:hover:not(:disabled) {
+  background: #eef2f1;
+}
+
 .controller.dark .btn-danger {
   color: #ff8b73;
   border-color: #382421;
@@ -809,6 +820,15 @@ body, button, input {
 
 .controller.dark .btn-danger:hover:not(:disabled) {
   background: #382421;
+}
+
+.controller.dark .btn-disconnect {
+  border-color: #3d514d;
+  color: #b6c9c4;
+}
+
+.controller.dark .btn-disconnect:hover:not(:disabled) {
+  background: #2a3a38;
 }
 
 .btn-text {
@@ -853,6 +873,49 @@ body, button, input {
 
 .timer-add-button {
   padding: 8px 12px;
+}
+
+.dialog-backdrop {
+  align-items: center;
+  background: rgba(12, 20, 18, 0.58);
+  display: flex;
+  inset: 0;
+  justify-content: center;
+  padding: 24px;
+  position: fixed;
+  z-index: 10;
+}
+
+.disconnect-dialog {
+  max-width: 440px;
+  width: 100%;
+}
+
+.disconnect-dialog h2 {
+  font-size: 23px;
+  margin: 0 0 10px;
+}
+
+.disconnect-dialog p {
+  color: #65716e;
+  line-height: 1.5;
+  margin: 0;
+}
+
+.controller.dark .disconnect-dialog p {
+  color: #c0d0cc;
+}
+
+.dialog-actions {
+  border-top: 1px solid #dde5e2;
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
+  padding: 16px 24px;
+}
+
+.controller.dark .dialog-actions {
+  border-color: #2b3936;
 }
 
 /* Advanced Field */

@@ -27,6 +27,7 @@ class BleJouleView extends React.Component<BleJouleViewProps, any> {
     error: "",
     manufacturerData: localStorage.getItem("chrome-joule-manufacturer-data") || "",
     showAdvancedSettings: false,
+    showDisconnectConfirmation: false,
     starting: false,
     dataReceivedAt: 0,
     timerDuration: 0,
@@ -96,6 +97,7 @@ class BleJouleView extends React.Component<BleJouleViewProps, any> {
             timeAtTemperatureStartedAt: 0,
             timeAtTemperaturePending: false,
             targetTemperaturePhaseObserved: false,
+            showDisconnectConfirmation: false,
             starting: false,
             status: "Connect directly to a nearby Joule over Bluetooth.",
           })
@@ -265,6 +267,23 @@ class BleJouleView extends React.Component<BleJouleViewProps, any> {
             </button>
           </div>
         </header>
+        {this.state.showDisconnectConfirmation &&
+          <div className="dialog-backdrop">
+            <section className="panel disconnect-dialog" role="dialog" aria-modal="true" aria-labelledby="disconnect-dialog-title">
+              <div className="panel-content">
+                <h2 id="disconnect-dialog-title">Disconnect Joule?</h2>
+                <p>
+                  {this.state.developerMode
+                    ? "This will end the simulated Joule connection."
+                    : "This will remove the saved pairing key. You will need to pair your Joule again by pressing its top button before you can control it."}
+                </p>
+              </div>
+              <div className="dialog-actions">
+                <button className="btn btn-text" type="button" onClick={this.cancelDisconnect}>Cancel</button>
+                <button className="btn btn-danger" type="button" onClick={this.confirmDisconnect}>Disconnect</button>
+              </div>
+            </section>
+          </div>}
         {this.state.error &&
           <section className="panel status-banner">
             <div className="panel-content status-banner-text">{this.state.error}</div></section>}
@@ -294,7 +313,7 @@ class BleJouleView extends React.Component<BleJouleViewProps, any> {
                     <span className={`state-pill ${isCooking ? "active" : ""}`}>
                       {isCooking ? "Cook in progress" : "Ready"}
                     </span>
-                    <button className="btn btn-text" onClick={this.disconnect}>Disconnect</button>
+                    <button className="btn btn-disconnect" onClick={this.requestDisconnect}>Disconnect</button>
                   </div>
                 </div>
                 <p className="status-detail">{this.state.status}</p>
@@ -787,11 +806,17 @@ class BleJouleView extends React.Component<BleJouleViewProps, any> {
     }
   }
 
-  private disconnect = () => {
+  private requestDisconnect = () => this.setState({ showDisconnectConfirmation: true })
+
+  private cancelDisconnect = () => this.setState({ showDisconnectConfirmation: false })
+
+  private confirmDisconnect = () => {
+    this.setState({ showDisconnectConfirmation: false })
     if (this.state.developerMode) {
       this.toggleDeveloperMode()
       return
     }
+    this.client.forgetPairing()
     this.client.disconnect()
   }
 
