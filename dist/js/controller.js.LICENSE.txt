@@ -4,10 +4,6 @@ object-assign
 @license MIT
 */
 
-/*!
- * Programatically add the following
- */
-
 /**
  * Checks if an event is supported in the current execution environment.
  *
