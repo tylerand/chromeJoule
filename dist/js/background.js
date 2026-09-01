@@ -1,2 +1,2 @@
-chrome.action.onClicked.addListener(()=>{chrome.tabs.create({url:chrome.runtime.getURL("controller.html")})});
+chrome.action.onClicked.addListener(()=>{chrome.tabs.create({url:chrome.runtime.getURL("controller.html")})}),chrome.runtime.onMessage.addListener(e=>{"timer-complete"===e.type&&chrome.notifications.create("joule-timer-complete",{type:"basic",iconUrl:"icon.png",title:"Joule timer complete",message:"Your cook timer has reached zero."})});
 //# sourceMappingURL=background.js.map

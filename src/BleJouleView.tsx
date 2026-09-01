@@ -1,6 +1,8 @@
 import * as React from "react"
 import JouleBleClient, { JouleData } from "./JouleBleClient"
 
+declare const chrome: any
+
 interface BleJouleViewProps {
   darkMode: boolean
   onToggleDarkMode: () => void
@@ -10,6 +12,7 @@ class BleJouleView extends React.Component<BleJouleViewProps, any> {
   private client = new JouleBleClient()
   private clockInterval: number
   private temperatureRefreshInterval: number
+  private timerCompletionNotified = false
 
   public state = {
     status: "Connect directly to a nearby Joule over Bluetooth.",
@@ -514,7 +517,22 @@ class BleJouleView extends React.Component<BleJouleViewProps, any> {
     return Math.max(0, data.timeRemaining - Math.floor((Date.now() - this.state.dataReceivedAt) / 1000))
   }
 
+  private timerSecondsForState(state) {
+    const data: JouleData = state.data
+    if (state.timerEndsAt > 0) return Math.max(0, Math.ceil((state.timerEndsAt - state.now) / 1000))
+    if (!data) return 0
+    return Math.max(0, data.timeRemaining - Math.floor((state.now - state.dataReceivedAt) / 1000))
+  }
+
   public componentDidUpdate(_previousProps, previousState) {
+    const previousTimerSeconds = this.timerSecondsForState(previousState)
+    const currentTimerSeconds = this.timerSecondsForState(this.state)
+    if (currentTimerSeconds > 0) this.timerCompletionNotified = false
+    if (previousTimerSeconds > 0 && currentTimerSeconds === 0 && !this.timerCompletionNotified) {
+      this.timerCompletionNotified = true
+      chrome.runtime.sendMessage({ type: "timer-complete" })
+    }
+
     const previousPhase = this.cookPhaseForState(previousState)
     const currentPhase = this.currentCookPhase()
     // A target change must first produce a heating or cooling phase before its
@@ -679,5 +697,3 @@ class BleJouleView extends React.Component<BleJouleViewProps, any> {
 }
 
 export default BleJouleView
-
-
