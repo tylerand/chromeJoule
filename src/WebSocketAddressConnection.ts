@@ -1,5 +1,5 @@
-const { Q, CirculatorSDK } = require("exports-loader?window!./bundle.js")
-import * as EventEmitter from "events"
+import { Q, CirculatorSDK } from "./circulatorSdk"
+import { EventEmitter } from "events"
 import { connectionProvidersConfig, connectionStates, disconnectReasons, firmwareUpdateConfig } from "./constants"
 import rootLogger from "./rootLogger"
 import WebSocketConnection from "./WebSocketConnection"

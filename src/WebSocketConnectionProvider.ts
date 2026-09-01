@@ -1,4 +1,4 @@
-const { Q, CirculatorSDK } = require("exports-loader?window!./bundle.js")
+import { Q, CirculatorSDK } from "./circulatorSdk"
 import * as _ from "underscore"
 import { connectionProvidersConfig, disconnectReasons } from "./constants"
 import WebSocketAddressConnection from "./WebSocketAddressConnection"

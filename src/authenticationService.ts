@@ -1,24 +1,33 @@
-const { CSApiClient } = require("exports-loader?window!./bundle.js")
-import * as $ from "jquery"
+import { CSApiClient } from "./circulatorSdk"
 import { csConfig } from "./constants"
 import rootLogger from "./rootLogger"
 
 class AuthenticationService {
-  public userInfo: { email: string, id: number, name: string, slug: string, token: string }
+  public userInfo: {
+    email: string,
+    id: number,
+    name: string,
+    slug: string,
+    token: string,
+    logged_in?: boolean,
+  }
 
   private headers: any = { "Content-Type": "application/x-www-form-urlencoded" }
   private authenticationApi = new CSApiClient.AuthenticationApi(csConfig.chefstepsEndpoint, rootLogger)
 
   public async checkSession() {
-    return $.get(this.authenticationApi.baseUrl + this.authenticationApi.endpoints.sessionMe, (response) => {
-      if (!response.token && response.logged_in === false) {
-        this.userInfo = null
-        return this.userInfo
-      }
+    const response = await fetch(
+      this.authenticationApi.baseUrl + this.authenticationApi.endpoints.sessionMe,
+      { credentials: "include" },
+    )
 
-      this.userInfo = response
-      return this.userInfo
-    })
+    if (!response.ok) {
+      throw new Error(`Unable to check ChefSteps session (${response.status})`)
+    }
+
+    const userInfo = await response.json()
+    this.userInfo = !userInfo.token && userInfo.logged_in === false ? null : userInfo
+    return this.userInfo
   }
 
   public async getUserInfo() {

@@ -1,4 +1,4 @@
-const { CirculatorSDK, CSApiClient } = require("exports-loader?window!./bundle.js")
+import { CirculatorSDK, CSApiClient } from "./circulatorSdk"
 import * as _ from "underscore"
 import authenticationService from "./authenticationService"
 import CirculatorProgram from "./CirculatorProgram"

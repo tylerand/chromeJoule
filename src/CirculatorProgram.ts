@@ -1,4 +1,4 @@
-const { Uuid } = require("exports-loader?window!./bundle.js")
+import { Uuid } from "./circulatorSdk"
 
 class CirculatorProgram {
   public setPoint: number

@@ -12,6 +12,7 @@ class CirculatorManagerView extends React.Component {
     password: "",
     userInfo: null,
     authorizing: true,
+    authError: "",
     circulatorManager: new WebSocketsCirculatorManager(),
     circulatorData: null,
   }
@@ -21,15 +22,15 @@ class CirculatorManagerView extends React.Component {
   }
 
   public async setup() {
-    const userInfo = await authenticationService.getUserInfo()
-
-    // Login error ocurred
-    if (!userInfo.token || userInfo.logged_in === false) {
-      this.setState({ authorizing : false })
-      return
-    }
-
     try {
+      const userInfo = await authenticationService.getUserInfo()
+
+      // Login error ocurred
+      if (!userInfo || !userInfo.token || userInfo.logged_in === false) {
+        this.setState({ authorizing : false })
+        return
+      }
+
       this.state.circulatorManager.initiateCirculatorManager(userInfo)
       await this.state.circulatorManager.circulatorScan()
       await this.state.circulatorManager.findLastAccessedCirculator()
@@ -45,6 +46,7 @@ class CirculatorManagerView extends React.Component {
       console.error("Unknown error ocurred", error)
       this.setState({
         authorizing: false,
+        authError: "ChefSteps retired the service this extension uses when Joule accounts moved to the Breville+ Cooking app. This version cannot connect to the current Breville+ service yet.",
       })
     }
   }
@@ -65,7 +67,7 @@ class CirculatorManagerView extends React.Component {
       } else if (activeClient.currentConnectionState === circulatorConnectionStates.disconnected) {
         subtitle = `You are disconnected from ${activeClient.name}`
       }
-    } else if (this.state.circulatorManager.sdkCirculatorManager.knownCirculators === {}) {
+    } else if (Object.keys(this.state.circulatorManager.sdkCirculatorManager.knownCirculators).length === 0) {
       subtitle = `No circulators found paired with this account. If you own a
       joule, make sure to pair with it through your phone first. Otherwise,
       an unknown error may have ocurred. ¯\_(ツ)_/¯`
@@ -107,9 +109,7 @@ class CirculatorManagerView extends React.Component {
           <Card className="name">
             <CardTitle title="Error" />
             <CardText>
-              Please make sure you are logged in
-              on at <a href="http://www.chefsteps.com" target="_blank">chefsteps.com</a> and
-              have cookies enabled. You can also try logging out and back in.
+              {this.state.authError || "Please make sure you are logged in on chefsteps.com and have cookies enabled. You can also try logging out and back in."}
             </CardText>
           </Card>
         </div>

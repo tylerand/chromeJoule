@@ -1,5 +1,5 @@
 import {Card, CardActions, CardText, CardTitle} from "material-ui/Card"
-const { Uuid } = require("exports-loader?window!./bundle.js")
+import { Uuid } from "./circulatorSdk"
 import FlatButton from "material-ui/FlatButton"
 import RaisedButton from "material-ui/RaisedButton"
 import RefreshIndicator from "material-ui/RefreshIndicator"

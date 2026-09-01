@@ -1,26 +1,24 @@
-const webpack = require("webpack");
 const path = require('path');
-const glob = require("glob");
 
 module.exports = {
     entry: {
-        popup: path.join(__dirname, 'src/popup.tsx'),
-        content_script: path.join(__dirname, 'src/content_script.ts'),
+        controller: path.join(__dirname, 'src/controller.tsx'),
         background: path.join(__dirname, 'src/background.ts'),
     },
     output: {
         path: path.join(__dirname, 'dist/js'),
-        filename: '[name].js'
+        filename: '[name].js',
+        clean: true,
     },
     devtool: 'source-map',
     module: {
-        loaders: [{
+        rules: [{
             exclude: /node_modules/,
             test: /\.tsx?$/,
             loader: 'ts-loader'
         }]
     },
     resolve: {
-        extensions: ['.ts', '.tsx', '.js', '.json', '.json.js'],
+        extensions: ['.ts', '.tsx', '.js', '.json'],
     }
 };
