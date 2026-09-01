@@ -40,8 +40,8 @@ class BleJouleView extends React.Component<BleJouleViewProps, any> {
     timerStartFailed: false,
     activeSetPoint: null,
     timeAtTemperatureStartedAt: 0,
+    timeAtTemperatureSeconds: 0,
     timeAtTemperaturePending: false,
-    targetTemperaturePhaseObserved: false,
     now: Date.now(),
   }
 
@@ -99,8 +99,8 @@ class BleJouleView extends React.Component<BleJouleViewProps, any> {
             timerStartFailed: false,
             activeSetPoint: null,
             timeAtTemperatureStartedAt: 0,
+            timeAtTemperatureSeconds: 0,
             timeAtTemperaturePending: false,
-            targetTemperaturePhaseObserved: false,
             showDisconnectConfirmation: false,
             starting: false,
             status: "Connect directly to a nearby Joule over Bluetooth.",
@@ -145,8 +145,8 @@ class BleJouleView extends React.Component<BleJouleViewProps, any> {
         timerStartFailed: false,
         activeSetPoint: setPoint,
         timeAtTemperatureStartedAt: 0,
+        timeAtTemperatureSeconds: 0,
         timeAtTemperaturePending: true,
-        targetTemperaturePhaseObserved: false,
       })
     } catch (error) {
       this.setState({ error: error.message || String(error) })
@@ -172,8 +172,8 @@ class BleJouleView extends React.Component<BleJouleViewProps, any> {
         timerStartFailed: false,
         activeSetPoint: null,
         timeAtTemperatureStartedAt: 0,
+        timeAtTemperatureSeconds: 0,
         timeAtTemperaturePending: false,
-        targetTemperaturePhaseObserved: false,
       })
       return
     }
@@ -190,8 +190,8 @@ class BleJouleView extends React.Component<BleJouleViewProps, any> {
         pausedTimerSeconds: 0,
         activeSetPoint: null,
         timeAtTemperatureStartedAt: 0,
+        timeAtTemperatureSeconds: 0,
         timeAtTemperaturePending: false,
-        targetTemperaturePhaseObserved: false,
       })
     } catch (error) {
       this.setState({ error: error.message || String(error) })
@@ -244,12 +244,14 @@ class BleJouleView extends React.Component<BleJouleViewProps, any> {
       ? this.state.activeSetPoint
       : targetTemperature
     const phase = this.cookPhase(isCooking, data, appliedTargetTemperature)
+    const isAtOrAboveTarget = this.isAtOrAboveTarget(this.state)
     const temperatureDirection = isCooking && data && isFinite(appliedTargetTemperature)
       ? data.bathTemp < appliedTargetTemperature - 0.3 ? "up" : data.bathTemp > appliedTargetTemperature + 0.3 ? "down" : "steady"
       : ""
-    const timeAtTemperature = this.state.timeAtTemperatureStartedAt > 0
-      ? Math.max(0, Math.floor((this.state.now - this.state.timeAtTemperatureStartedAt) / 1000))
-      : 0
+    const timeAtTemperature = this.state.timeAtTemperatureSeconds +
+      (this.state.timeAtTemperatureStartedAt > 0
+        ? Math.max(0, Math.floor((this.state.now - this.state.timeAtTemperatureStartedAt) / 1000))
+        : 0)
     const canUpdateTemperature = isCooking &&
       isFinite(targetTemperature) &&
       (this.state.activeSetPoint === null || Math.abs(targetTemperature - this.state.activeSetPoint) > 0.05)
@@ -339,7 +341,7 @@ class BleJouleView extends React.Component<BleJouleViewProps, any> {
             <div className="dashboard-grid">
               <section className={`panel temperature-panel ${phase.toLowerCase()}`}>
                 <div className="panel-content dashboard-card-text">
-                  <p className="panel-label">Live water temperature</p>
+                  <p className="panel-label">Current water temperature</p>
                   <div className="temperature-reading">
                     <strong>{temperature}</strong>
                     {temperatureDirection && temperatureDirection !== "steady" &&
@@ -473,13 +475,13 @@ class BleJouleView extends React.Component<BleJouleViewProps, any> {
                     <div>
                       <p className="panel-label">Time at temperature</p>
                       <p className="at-temperature-detail">
-                        {this.state.timeAtTemperatureStartedAt > 0
-                          ? "Since the water reached the target"
+                        {timeAtTemperature > 0
+                          ? isAtOrAboveTarget ? "At or above the target temperature" : "Paused until the water reaches the target"
                           : isCooking ? "Starts when the water reaches the target" : "Starts during an active cook"}
                       </p>
                     </div>
                     <strong className="at-temperature-reading">
-                      {this.state.timeAtTemperatureStartedAt > 0 ? this.formatDuration(timeAtTemperature) : "--:--"}
+                      {timeAtTemperature > 0 ? this.formatDuration(timeAtTemperature) : "--:--"}
                     </strong>
                   </div>
                 </div></section>
@@ -552,6 +554,18 @@ class BleJouleView extends React.Component<BleJouleViewProps, any> {
       ? this.remainingTimerSeconds()
       : this.state.pendingTimerSeconds
     const startsTimerImmediately = cookTime > 0 && this.canStartTimer(setPoint)
+    const targetTemperatureIncreased = this.state.activeSetPoint === null || setPoint > this.state.activeSetPoint + 0.05
+    const timeAtTemperatureState = targetTemperatureIncreased
+      ? {
+          timeAtTemperatureStartedAt: startsTimerImmediately ? Date.now() : 0,
+          timeAtTemperatureSeconds: 0,
+          timeAtTemperaturePending: !startsTimerImmediately,
+        }
+      : {
+          timeAtTemperatureStartedAt: this.state.timeAtTemperatureStartedAt,
+          timeAtTemperatureSeconds: this.state.timeAtTemperatureSeconds,
+          timeAtTemperaturePending: this.state.timeAtTemperaturePending,
+        }
     if (this.state.developerMode) {
       this.setState({
         data: this.mockData(1, setPoint, startsTimerImmediately ? cookTime : 0),
@@ -562,9 +576,7 @@ class BleJouleView extends React.Component<BleJouleViewProps, any> {
         timerPaused: false,
         pausedTimerSeconds: 0,
         timerStartFailed: false,
-        timeAtTemperatureStartedAt: 0,
-        timeAtTemperaturePending: true,
-        targetTemperaturePhaseObserved: false,
+        ...timeAtTemperatureState,
         error: "",
         status: "Mock target temperature updated.",
       })
@@ -581,9 +593,7 @@ class BleJouleView extends React.Component<BleJouleViewProps, any> {
         timerPaused: false,
         pausedTimerSeconds: 0,
         timerStartFailed: false,
-        timeAtTemperatureStartedAt: 0,
-        timeAtTemperaturePending: true,
-        targetTemperaturePhaseObserved: false,
+        ...timeAtTemperatureState,
         error: timed || cookTime === 0 ? "" : "Joule restarted, but did not accept the remaining device timer.",
         status: timed ? "Temperature and timer updated." : "Temperature updated.",
       })
@@ -728,28 +738,28 @@ class BleJouleView extends React.Component<BleJouleViewProps, any> {
       )
     }
 
-    const previousPhase = this.cookPhaseForState(previousState)
-    const currentPhase = this.currentCookPhase()
-    // A target change must first produce a heating or cooling phase before its
-    // elapsed-at-temperature clock can start on the following Cooking phase.
-    if (
-      this.state.timeAtTemperaturePending &&
-      !this.state.targetTemperaturePhaseObserved &&
-      (currentPhase === "Preheating" || currentPhase === "Cooling")
-    ) {
-      this.setState({ targetTemperaturePhaseObserved: true })
+    const isAtOrAboveTarget = this.isAtOrAboveTarget(this.state)
+    // Accumulate only the periods where the bath is safely at or above its
+    // active target. This also preserves elapsed time across lower targets.
+    if (this.state.timeAtTemperaturePending && isAtOrAboveTarget) {
+      this.setState({
+        timeAtTemperatureStartedAt: Date.now(),
+        timeAtTemperaturePending: false,
+      })
       return
     }
-    if (
-      this.state.timeAtTemperaturePending &&
-      this.state.targetTemperaturePhaseObserved &&
-      currentPhase === "Cooking" &&
-      (previousPhase === "Preheating" || previousPhase === "Cooling") &&
-      this.state.timeAtTemperatureStartedAt === 0
-    ) this.setState({
-      timeAtTemperatureStartedAt: Date.now(),
-      timeAtTemperaturePending: false,
-    })
+    if (!this.state.timeAtTemperaturePending && this.state.timeAtTemperatureStartedAt > 0 && !isAtOrAboveTarget) {
+      this.setState({
+        timeAtTemperatureStartedAt: 0,
+        timeAtTemperatureSeconds: this.state.timeAtTemperatureSeconds +
+          Math.max(0, Math.floor((Date.now() - this.state.timeAtTemperatureStartedAt) / 1000)),
+      })
+      return
+    }
+    if (!this.state.timeAtTemperaturePending && this.state.timeAtTemperatureStartedAt === 0 && isAtOrAboveTarget) {
+      this.setState({ timeAtTemperatureStartedAt: Date.now() })
+      return
+    }
 
     if (
       this.state.pendingTimerSeconds > 0 &&
@@ -759,26 +769,17 @@ class BleJouleView extends React.Component<BleJouleViewProps, any> {
     ) this.startPendingTimer()
   }
 
-  private cookPhaseForState(state) {
-    const data: JouleData = state.data
-    const isCooking = data && [1, 2, 3].indexOf(data.programStep) !== -1
-    const selectedTemperature = parseFloat(state.setPoint)
-    const targetTemperature = state.isCelsius ? selectedTemperature : (selectedTemperature - 32) / 1.8
-    const appliedTargetTemperature = isCooking && state.activeSetPoint !== null
-      ? state.activeSetPoint
-      : targetTemperature
-    return this.cookPhase(isCooking, data, appliedTargetTemperature)
-  }
-
-  private currentCookPhase() {
-    return this.cookPhaseForState(this.state)
-  }
-
   private canStartTimer(setPoint: number) {
     const data: JouleData = this.state.data
-    // Match the Cook phase threshold so the displayed phase, timer, and
-    // time-at-temperature clock transition at one consistent temperature.
-    return data && setPoint !== null && data.bathTemp >= setPoint - 0.3
+    return data && setPoint !== null && data.bathTemp >= setPoint
+  }
+
+  private isAtOrAboveTarget(state) {
+    const data: JouleData = state.data
+    return data &&
+      [1, 2, 3].indexOf(data.programStep) !== -1 &&
+      state.activeSetPoint !== null &&
+      data.bathTemp >= state.activeSetPoint
   }
 
   private startPendingTimer = async () => {
@@ -822,8 +823,8 @@ class BleJouleView extends React.Component<BleJouleViewProps, any> {
         pausedTimerSeconds: 0,
         activeSetPoint: null,
         timeAtTemperatureStartedAt: 0,
+        timeAtTemperatureSeconds: 0,
         timeAtTemperaturePending: false,
-        targetTemperaturePhaseObserved: false,
         status: "Connect directly to a nearby Joule over Bluetooth.",
       })
       return
@@ -854,8 +855,8 @@ class BleJouleView extends React.Component<BleJouleViewProps, any> {
       timerStartFailed: false,
       activeSetPoint: setPoint,
       timeAtTemperatureStartedAt: 0,
+      timeAtTemperatureSeconds: 0,
       timeAtTemperaturePending: true,
-      targetTemperaturePhaseObserved: false,
       starting: false,
     })
   }
