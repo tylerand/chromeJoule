@@ -465,7 +465,7 @@ body {
 
 .setting-field {
   display: block;
-  padding: 14px 0;
+  padding: 14px 0 0;
 }
 
 .setting-field + .setting-field {
@@ -713,7 +713,7 @@ body, button, input {
   display: flex;
   flex-wrap: wrap;
   gap: 12px;
-  padding: 16px 24px;
+  padding: 20px 24px !important;
   background: #fcfdfd;
 }
 
