@@ -1,3 +1,5 @@
+// Joule's proprietary GATT service and the Generic Attribute service used for
+// optional Service Changed indications.
 const JOULE_SERVICE_UUID = "700b4321-9836-4383-a2b2-31a9098d1473"
 const WRITE_CHARACTERISTIC_UUID = "700b4322-9836-4383-a2b2-31a9098d1473"
 const READ_CHARACTERISTIC_UUID = "700b4323-9836-4383-a2b2-31a9098d1473"
@@ -8,6 +10,8 @@ const AUTH_KEY_PREFIX = "chrome-joule-auth-key:"
 const MANUFACTURER_DATA_STORAGE_KEY = "chrome-joule-manufacturer-data"
 const JOULE_MANUFACTURER_ID = 0x0159
 
+// Numeric protobuf field identifiers used by the subset of Joule's controller
+// protocol required for pairing, live telemetry, and manual cook programs.
 const field = {
   startProgramRequest: 50,
   startProgramReply: 51,
@@ -43,6 +47,8 @@ interface DecodedMessage {
   cookTime?: number
 }
 
+// The protocol is protobuf-like but does not use a generated schema. These
+// helpers build the wire representation directly for the supported fields.
 function concat(...values: Uint8Array[]) {
   const length = values.reduce((total, value) => total + value.length, 0)
   const result = new Uint8Array(length)
@@ -241,6 +247,8 @@ export default class JouleBleClient {
       throw new Error("Manufacturer data must contain at least 8 complete bytes of hexadecimal data.")
     }
 
+    // Some firmware accepts an address-aware start request only. The first and
+    // final eight bytes cover both formats observed in Joule advertisements.
     this.recipientAddresses = []
     this.addRecipientAddress(hexToKey(normalized.slice(0, 16)))
     this.addRecipientAddress(hexToKey(normalized.slice(-16)))
@@ -252,6 +260,8 @@ export default class JouleBleClient {
     onData: (data: JouleData) => void,
     onDisconnect: () => void,
   ) {
+    // A saved pairing key is scoped to Chrome's stable Bluetooth device ID.
+    // First-time pairing instead waits for the physical button confirmation.
     const bluetooth = (navigator as any).bluetooth
     if (!bluetooth) throw new Error("Web Bluetooth is unavailable. Use Chrome on Windows with Bluetooth enabled.")
 
@@ -269,6 +279,8 @@ export default class JouleBleClient {
     this.device.addEventListener("gattserverdisconnected", this.handleDisconnection)
     this.device.addEventListener("advertisementreceived", this.handleAdvertisement)
     try {
+      // Advertisement data is optional; it supplies compatibility addresses
+      // for firmware that rejects the standard start-program request.
       await this.device.watchAdvertisements()
     } catch (error) {
       console.info("Joule advertiser data is unavailable on this Bluetooth adapter.", error)
@@ -282,6 +294,8 @@ export default class JouleBleClient {
     this.subscribeCharacteristic = await service.getCharacteristic(SUBSCRIBE_CHARACTERISTIC_UUID)
 
     try {
+      // Service Changed indications are useful when supported but are not
+      // required to exchange Joule control messages.
       const genericAttribute = await this.server.getPrimaryService(GENERIC_ATTRIBUTE_SERVICE_UUID)
       const serviceChanged = await genericAttribute.getCharacteristic(SERVICE_CHANGED_CHARACTERISTIC_UUID)
       await serviceChanged.startNotifications()
@@ -417,6 +431,8 @@ export default class JouleBleClient {
   }
 
   public async setTimer(cookTime: number) {
+    // Joule has no in-place timer update command. Restarting the current program
+    // with its current target and a new duration is the supported equivalent.
     if (this.currentSetPoint === null) throw new Error("Set a target temperature before adding a timer.")
     await this.stopProgram()
     await this.delay(500)
@@ -445,6 +461,8 @@ export default class JouleBleClient {
       }
     }
 
+    // Notifications can arrive while a previous characteristic read is pending.
+    // Serializing reads prevents responses from being parsed out of order.
     this.readQueue = this.readQueue
       .then(async () => {
         if (this.connected) await this.processMessage(await this.readCharacteristic.readValue())
@@ -546,6 +564,8 @@ export default class JouleBleClient {
   }
 
   private async sendAndWait(payload: Uint8Array, expectedType: number, timeout: number) {
+    // The protocol does not correlate concurrent replies, so exactly one
+    // command may wait for a response at a time.
     if (this.pendingReply) throw new Error("Joule is already processing a command.")
     const reply = new Promise<DecodedMessage>((resolve, reject) => {
       this.pendingReply = { type: expectedType, resolve, reject }
@@ -578,6 +598,7 @@ export default class JouleBleClient {
   }
 
   private async waitForData(previousSequenceNumber: number, timeout: number) {
+    // A new live-feed sequence number confirms that the initial read is fresh.
     const deadline = Date.now() + timeout
     while (Date.now() < deadline) {
       if (this.latestData && this.latestData.sequenceNumber !== previousSequenceNumber) return
