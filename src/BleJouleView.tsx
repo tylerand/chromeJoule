@@ -1,9 +1,7 @@
-import { Card, CardActions, CardText } from "material-ui/Card"
-import FlatButton from "material-ui/FlatButton"
-import RaisedButton from "material-ui/RaisedButton"
-import TextField from "material-ui/TextField"
 import * as React from "react"
 import JouleBleClient, { JouleData } from "./JouleBleClient"
+
+declare const chrome: any
 
 interface BleJouleViewProps {
   darkMode: boolean
@@ -14,6 +12,7 @@ class BleJouleView extends React.Component<BleJouleViewProps, any> {
   private client = new JouleBleClient()
   private clockInterval: number
   private temperatureRefreshInterval: number
+  private timerCompletionNotified = false
 
   public state = {
     status: "Connect directly to a nearby Joule over Bluetooth.",
@@ -254,39 +253,25 @@ class BleJouleView extends React.Component<BleJouleViewProps, any> {
           </div>
         </header>
         {this.state.error &&
-          <Card className="status-banner">
-            <CardText className="status-banner-text">{this.state.error}</CardText>
-          </Card>}
+          <section className="panel status-banner">
+            <div className="panel-content status-banner-text">{this.state.error}</div></section>}
         {!this.state.connected &&
-          <Card className="connection-card">
-            <CardText className="connection-status">
+          <section className="panel connection-card">
+            <div className="panel-content connection-status">
               <h2>Connect your Joule</h2>
               <p>{this.state.status}</p>
-            </CardText>
-            <div>
-              <CardActions>
-                <RaisedButton label={this.state.connecting ? "Connecting..." : "Connect Joule"} onClick={this.connect} disabled={this.state.connecting} primary />
-                <FlatButton
-                  label="Advanced"
-                  onClick={() => this.setState({ showAdvancedSettings: !this.state.showAdvancedSettings })}
-                />
-              </CardActions>
+            </div><div>
+              <div className="panel-actions">
+                <button className="btn btn-primary" onClick={this.connect} disabled={this.state.connecting}>{this.state.connecting ? "Connecting..." : "Connect Joule"}</button>
+                <button className="btn btn-text" onClick={() => this.setState({ showAdvancedSettings: !this.state.showAdvancedSettings })}>Advanced</button>
+              </div>
               {this.state.showAdvancedSettings &&
-                <CardText>
-                  <TextField
-                    value={this.state.manufacturerData}
-                    onChange={(_, value) => this.setState({ manufacturerData: value })}
-                    floatingLabelText="Manufacturer data from nRF Connect"
-                    hintText="01C0000031E8DE9349"
-                    fullWidth
-                  />
-                </CardText>}
-            </div>
-          </Card>}
+                <div className="panel-content"><label className="advanced-field"><span>Manufacturer data from nRF Connect</span><input type="text" value={this.state.manufacturerData} onChange={(e) => this.setState({ manufacturerData: e.target.value })} placeholder="01C0000031E8DE9349" /></label></div>}
+            </div></section>}
         {this.state.connected &&
           <main className="cook-dashboard">
-            <Card className="dashboard-status">
-              <CardText className="dashboard-card-text">
+            <section className="panel dashboard-status">
+              <div className="panel-content dashboard-card-text">
                 <div className="status-heading">
                   <div>
                     <p className="eyebrow">Joule is connected</p>
@@ -296,16 +281,15 @@ class BleJouleView extends React.Component<BleJouleViewProps, any> {
                     <span className={`state-pill ${isCooking ? "active" : ""}`}>
                       {isCooking ? "Cook in progress" : "Ready"}
                     </span>
-                    <FlatButton label="Disconnect" onClick={this.disconnect} />
+                    <button className="btn btn-text" onClick={this.disconnect}>Disconnect</button>
                   </div>
                 </div>
                 <p className="status-detail">{this.state.status}</p>
-              </CardText>
-            </Card>
+              </div></section>
 
             <div className="dashboard-grid">
-              <Card className={`temperature-panel ${phase.toLowerCase()}`}>
-                <CardText className="dashboard-card-text">
+              <section className={`panel temperature-panel ${phase.toLowerCase()}`}>
+                <div className="panel-content dashboard-card-text">
                   <p className="panel-label">Live water temperature</p>
                   <div className="temperature-reading">
                     <strong>{temperature}</strong>
@@ -351,18 +335,17 @@ class BleJouleView extends React.Component<BleJouleViewProps, any> {
                       </div>
                     </label>
                   </div>
-                </CardText>
-                <CardActions className="panel-actions">
+                </div>
+                <div className="panel-actions">
                   {!isCooking &&
-                    <RaisedButton label={this.state.starting ? "Starting..." : "Start preheat"} onClick={this.start} disabled={this.state.starting} primary />}
+                    <button className="btn btn-primary" onClick={this.start} disabled={this.state.starting}>{this.state.starting ? "Starting..." : "Start preheat"}</button>}
                   {isCooking &&
-                    <RaisedButton label={this.state.starting ? "Updating..." : "Update temperature"} onClick={this.updateTemperature} disabled={this.state.starting || !canUpdateTemperature} primary />}
-                  {isCooking && <FlatButton label="Stop cook" onClick={this.stop} disabled={this.state.starting} secondary />}
-                </CardActions>
-              </Card>
+                    <button className="btn btn-primary" onClick={this.updateTemperature} disabled={this.state.starting || !canUpdateTemperature}>{this.state.starting ? "Updating..." : "Update temperature"}</button>}
+                  {isCooking && <button className="btn btn-danger" onClick={this.stop} disabled={this.state.starting}>Stop cook</button>}
+                </div></section>
 
-              <Card className="timer-panel">
-                <CardText className="dashboard-card-text">
+              <section className="panel timer-panel">
+                <div className="panel-content dashboard-card-text">
                   <p className="panel-label">Cook timer</p>
                   <div className={`cook-timer ${hasTimer ? "counting" : "solid"} ${timerIsPending ? "paused" : ""}`}>
                     <svg className="cook-timer-ring" viewBox="0 0 160 160" aria-hidden="true">
@@ -400,15 +383,15 @@ class BleJouleView extends React.Component<BleJouleViewProps, any> {
                       <b>min</b>
                     </div>
                   </label>
-                </CardText>
+                </div>
                 {isCooking &&
-                  <CardActions className="panel-actions">
-                    <RaisedButton label={this.state.timerStarting ? "Starting timer..." : timerIsPending || hasTimer ? "Update timer" : "Start timer"} onClick={this.setTimer} disabled={this.state.starting || this.state.timerStarting} primary />
-                  </CardActions>}
-              </Card>
+                  <div className="panel-actions">
+                    <button className="btn btn-primary" onClick={this.setTimer} disabled={this.state.starting || this.state.timerStarting}>{this.state.timerStarting ? "Starting timer..." : timerIsPending || hasTimer ? "Update timer" : "Start timer"}</button>
+                  </div>}
+              </section>
 
-              <Card className="at-temperature-panel">
-                <CardText className="dashboard-card-text">
+              <section className="panel at-temperature-panel">
+                <div className="panel-content dashboard-card-text">
                   <div className="at-temperature-content">
                     <div>
                       <p className="panel-label">Time at temperature</p>
@@ -422,8 +405,7 @@ class BleJouleView extends React.Component<BleJouleViewProps, any> {
                       {this.state.timeAtTemperatureStartedAt > 0 ? this.formatDuration(timeAtTemperature) : "--:--"}
                     </strong>
                   </div>
-                </CardText>
-              </Card>
+                </div></section>
 
             </div>
           </main>}
@@ -535,7 +517,29 @@ class BleJouleView extends React.Component<BleJouleViewProps, any> {
     return Math.max(0, data.timeRemaining - Math.floor((Date.now() - this.state.dataReceivedAt) / 1000))
   }
 
+  private timerSecondsForState(state) {
+    const data: JouleData = state.data
+    if (state.timerEndsAt > 0) return Math.max(0, Math.ceil((state.timerEndsAt - state.now) / 1000))
+    if (!data) return 0
+    return Math.max(0, data.timeRemaining - Math.floor((state.now - state.dataReceivedAt) / 1000))
+  }
+
   public componentDidUpdate(_previousProps, previousState) {
+    const previousTimerSeconds = this.timerSecondsForState(previousState)
+    const currentTimerSeconds = this.timerSecondsForState(this.state)
+    if (currentTimerSeconds > 0) this.timerCompletionNotified = false
+    if (previousTimerSeconds > 0 && currentTimerSeconds === 0 && !this.timerCompletionNotified) {
+      this.timerCompletionNotified = true
+      chrome.runtime.sendMessage({ type: "timer-complete" })
+    }
+    if (this.state.timerEndsAt !== previousState.timerEndsAt) {
+      chrome.runtime.sendMessage(
+        this.state.timerEndsAt > 0
+          ? { type: "timer-scheduled", endsAt: this.state.timerEndsAt }
+          : { type: "timer-cleared" },
+      )
+    }
+
     const previousPhase = this.cookPhaseForState(previousState)
     const currentPhase = this.currentCookPhase()
     // A target change must first produce a heating or cooling phase before its
