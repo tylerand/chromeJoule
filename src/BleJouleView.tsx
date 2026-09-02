@@ -17,6 +17,9 @@ class BleJouleView extends React.Component<BleJouleViewProps, any> {
   private clockInterval: number
   private temperatureRefreshInterval: number
   private timerExtensionTimeout = 0
+  private disconnectRequested = false
+  private reconnectInProgress = false
+  private cookRestartInProgress = false
   private hoursInput: HTMLInputElement | null = null
   private minutesInput: HTMLInputElement | null = null
   private secondsInput: HTMLInputElement | null = null
@@ -36,6 +39,8 @@ class BleJouleView extends React.Component<BleJouleViewProps, any> {
     manufacturerData: localStorage.getItem("chrome-joule-manufacturer-data") || "",
     showAdvancedSettings: false,
     showDisconnectConfirmation: false,
+    reconnecting: false,
+    reconnectError: "",
     starting: false,
     dataReceivedAt: 0,
     timerDuration: 0,
@@ -44,6 +49,7 @@ class BleJouleView extends React.Component<BleJouleViewProps, any> {
     timerPaused: false,
     pausedTimerSeconds: 0,
     timerStarting: false,
+    cookRestarting: false,
     timerExtensionUpdating: false,
     timerStartFailed: false,
     activeSetPoint: null,
@@ -54,24 +60,32 @@ class BleJouleView extends React.Component<BleJouleViewProps, any> {
   }
 
   public componentDidMount() {
-    // BLE telemetry is refreshed less often than the displayed clocks. The
-    // local clock keeps countdown and elapsed-time displays accurate between
-    // device updates, while the slower refresh limits Bluetooth traffic.
+    // The local clock keeps displays accurate between telemetry updates. Poll
+    // often enough to start pending timers promptly after Joule reaches its
+    // target, without turning the dashboard into a continuous BLE read loop.
     this.clockInterval = window.setInterval(() => {
       this.advanceMockCook()
       this.setState({ now: Date.now() })
     }, 1000)
     this.temperatureRefreshInterval = window.setInterval(() => {
-      if (this.state.connected && !this.state.developerMode && !this.state.starting) {
+      if (
+        this.state.connected &&
+        !this.state.developerMode &&
+        !this.state.starting &&
+        !this.state.timerStarting &&
+        !this.state.timerExtensionUpdating &&
+        !this.state.reconnecting
+      ) {
         this.client.refreshLiveData().catch((error) => console.warn("Could not refresh Joule temperature.", error))
       }
-    }, 20000)
+    }, 5000)
   }
 
   public componentWillUnmount() {
     window.clearInterval(this.clockInterval)
     window.clearInterval(this.temperatureRefreshInterval)
     this.clearTimerExtensionUpdate()
+    this.disconnectRequested = true
     this.client.disconnect()
   }
 
@@ -81,39 +95,22 @@ class BleJouleView extends React.Component<BleJouleViewProps, any> {
       if (this.state.manufacturerData) this.client.setManufacturerData(this.state.manufacturerData)
       await this.client.connect(
         (status) => this.setState({ status }),
-        (data: JouleData) => this.setState({
-          data,
-          connected: true,
-          dataReceivedAt: Date.now(),
-          setPoint: this.prefilledSetPoint(data),
-          timerDuration: this.timerDuration(data),
-          timerEndsAt: this.initialTimerEnd(data),
-          activeSetPoint: data.setPoint === undefined ? this.state.activeSetPoint : data.setPoint,
-        }),
-        () => {
-          this.clearTimerExtensionUpdate()
+        (data: JouleData) => {
+          const programIsActive = [1, 2, 3].indexOf(data.programStep) !== -1
+          const preserveCookState = this.cookRestartInProgress
+          if (programIsActive) this.cookRestartInProgress = false
           this.setState({
-            connected: false,
-            connecting: false,
-            data: null,
-            dataReceivedAt: 0,
-            timerDuration: 0,
-            timerEndsAt: 0,
-            pendingTimerSeconds: 0,
-            timerPaused: false,
-            pausedTimerSeconds: 0,
-            timerStarting: false,
-            timerExtensionUpdating: false,
-            timerStartFailed: false,
-            activeSetPoint: null,
-            timeAtTemperatureStartedAt: 0,
-            timeAtTemperatureSeconds: 0,
-            timeAtTemperaturePending: false,
-            showDisconnectConfirmation: false,
-            starting: false,
-            status: "Connect directly to a nearby Joule over Bluetooth.",
+            data,
+            connected: true,
+            dataReceivedAt: Date.now(),
+            setPoint: this.prefilledSetPoint(data),
+            timerDuration: preserveCookState ? this.state.timerDuration : this.timerDuration(data),
+            timerEndsAt: this.initialTimerEnd(data),
+            activeSetPoint: data.setPoint === undefined ? this.state.activeSetPoint : data.setPoint,
+            cookRestarting: programIsActive ? false : preserveCookState,
           })
         },
+        this.handleConnectionLost,
       )
       this.setState({ connected: true, connecting: false })
     } catch (error) {
@@ -235,7 +232,11 @@ class BleJouleView extends React.Component<BleJouleViewProps, any> {
   public render() {
     const data: JouleData = this.state.data
     const temperature = data ? this.displayTemperature(data.bathTemp) : "Awaiting live data"
-    const isCooking = data && [1, 2, 3].indexOf(data.programStep) !== -1
+    const isCooking = data && (
+      [1, 2, 3].indexOf(data.programStep) !== -1 ||
+      this.state.cookRestarting ||
+      this.cookRestartInProgress
+    )
     const timeRemaining = this.state.timerEndsAt > 0
       ? Math.max(0, Math.ceil((this.state.timerEndsAt - this.state.now) / 1000))
       : data ? Math.max(0, data.timeRemaining - Math.floor((this.state.now - this.state.dataReceivedAt) / 1000)) : 0
@@ -254,11 +255,10 @@ class BleJouleView extends React.Component<BleJouleViewProps, any> {
     const appliedTargetTemperature = isCooking && this.state.activeSetPoint !== null
       ? this.state.activeSetPoint
       : targetTemperature
-    const phase = this.cookPhase(isCooking, data, appliedTargetTemperature)
+    const hasReachedTarget = this.state.timeAtTemperatureStartedAt > 0 || this.state.timeAtTemperatureSeconds > 0
+    const phase = this.cookPhase(isCooking, data, appliedTargetTemperature, hasReachedTarget)
     const isAtOrAboveTarget = this.isAtOrAboveTarget(this.state)
-    const temperatureDirection = isCooking && data && isFinite(appliedTargetTemperature)
-      ? data.bathTemp < appliedTargetTemperature - 0.3 ? "up" : data.bathTemp > appliedTargetTemperature + 0.3 ? "down" : "steady"
-      : ""
+    const temperatureDirection = phase === "Preheating" ? "up" : phase === "Cooling" ? "down" : ""
     const timeAtTemperature = this.state.timeAtTemperatureSeconds +
       (this.state.timeAtTemperatureStartedAt > 0
         ? Math.max(0, Math.floor((this.state.now - this.state.timeAtTemperatureStartedAt) / 1000))
@@ -315,6 +315,19 @@ class BleJouleView extends React.Component<BleJouleViewProps, any> {
               </div>
             </section>
           </div>}
+        {this.state.reconnecting &&
+          <div className="dialog-backdrop">
+            <section className="panel disconnect-dialog reconnect-dialog" role="dialog" aria-modal="true" aria-labelledby="reconnect-dialog-title">
+              <div className="panel-content">
+                <h2 id="reconnect-dialog-title">Reconnecting to Joule</h2>
+                <p>{this.state.reconnectError || "Joule is applying the updated cook settings. The dashboard will reconnect shortly."}</p>
+              </div>
+              {this.state.reconnectError &&
+                <div className="dialog-actions">
+                  <button className="btn btn-primary" type="button" onClick={this.beginReconnection}>Retry connection</button>
+                </div>}
+            </section>
+          </div>}
         {this.state.error &&
           <section className="panel status-banner">
             <div className="panel-content status-banner-text">{this.state.error}</div></section>}
@@ -356,7 +369,7 @@ class BleJouleView extends React.Component<BleJouleViewProps, any> {
                   <p className="panel-label">Current water temperature</p>
                   <div className="temperature-reading">
                     <strong>{temperature}</strong>
-                    {temperatureDirection && temperatureDirection !== "steady" &&
+                    {temperatureDirection &&
                       <span
                         className={`temperature-direction ${temperatureDirection}`}
                         aria-label={temperatureDirection === "up" ? "Heating toward target" : "Cooling toward target"}
@@ -573,11 +586,16 @@ class BleJouleView extends React.Component<BleJouleViewProps, any> {
     return Date.now() + (data.timeRemaining * 1000)
   }
 
-  private cookPhase(isCooking: boolean, data: JouleData, targetTemperature: number) {
+  private cookPhase(isCooking: boolean, data: JouleData, targetTemperature: number, hasReachedTarget: boolean) {
     if (!isCooking) return "Ready to preheat"
     if (!isFinite(targetTemperature)) return "Cooking"
     const temperatureTolerance = 0.3
-    if (data.bathTemp < targetTemperature - temperatureTolerance) return "Preheating"
+    // Preheating ends only once Joule reaches the exact target. After that,
+    // the tolerance band prevents minor normal temperature variation from
+    // repeatedly switching the cook status back to Preheating.
+    if (data.bathTemp < targetTemperature && (!hasReachedTarget || data.bathTemp < targetTemperature - temperatureTolerance)) {
+      return "Preheating"
+    }
     if (data.bathTemp > targetTemperature + temperatureTolerance) return "Cooling"
     return "Cooking"
   }
@@ -637,7 +655,13 @@ class BleJouleView extends React.Component<BleJouleViewProps, any> {
       })
       return
     }
-    this.setState({ starting: true, status: "Updating target temperature...", error: "" })
+    this.cookRestartInProgress = true
+    this.setState({
+      starting: true,
+      cookRestarting: true,
+      status: "Updating target temperature...",
+      error: "",
+    })
     try {
       const timed = await this.client.updateSetPoint(setPoint, startsTimerImmediately ? cookTime : 0)
       this.setState({
@@ -654,7 +678,8 @@ class BleJouleView extends React.Component<BleJouleViewProps, any> {
         status: timed ? "Temperature and timer updated." : "Temperature updated.",
       })
     } catch (error) {
-      this.setState({ error: error.message || String(error) })
+      this.cookRestartInProgress = false
+      this.setState({ cookRestarting: false, error: error.message || String(error) })
     } finally {
       this.setState({ starting: false })
     }
@@ -685,8 +710,18 @@ class BleJouleView extends React.Component<BleJouleViewProps, any> {
   private resumeTimer = async () => {
     const remainingSeconds = this.state.pausedTimerSeconds
     if (remainingSeconds <= 0) return
+    // setTimer restarts Joule and briefly reports a stopped program, which
+    // clears timerDuration through the live-data callback. Preserve it first
+    // so the resumed countdown remains visible and retains its progress.
+    const timerDuration = this.state.timerDuration || remainingSeconds
 
-    this.setState({ timerStarting: true, error: "", status: "Resuming timer..." })
+    this.cookRestartInProgress = true
+    this.setState({
+      timerStarting: true,
+      cookRestarting: true,
+      error: "",
+      status: "Resuming timer...",
+    })
     try {
       if (!this.state.developerMode) {
         const timed = await this.client.setTimer(remainingSeconds)
@@ -694,6 +729,7 @@ class BleJouleView extends React.Component<BleJouleViewProps, any> {
       }
       this.setState({
         data: this.state.developerMode ? this.mockData(1, this.state.activeSetPoint, remainingSeconds) : this.state.data,
+        timerDuration,
         timerEndsAt: Date.now() + (remainingSeconds * 1000),
         timerPaused: false,
         pausedTimerSeconds: 0,
@@ -701,7 +737,12 @@ class BleJouleView extends React.Component<BleJouleViewProps, any> {
         status: "Timer resumed.",
       })
     } catch (error) {
-      this.setState({ error: error.message || String(error), status: "Timer remains paused." })
+      this.cookRestartInProgress = false
+      this.setState({
+        cookRestarting: false,
+        error: error.message || String(error),
+        status: "Timer remains paused.",
+      })
     } finally {
       this.setState({ timerStarting: false })
     }
@@ -749,7 +790,8 @@ class BleJouleView extends React.Component<BleJouleViewProps, any> {
     const remainingSeconds = this.remainingTimerSeconds()
     if (remainingSeconds <= 0) return
 
-    this.setState({ timerExtensionUpdating: true })
+    this.cookRestartInProgress = true
+    this.setState({ timerExtensionUpdating: true, cookRestarting: true })
     try {
       // Recalculate just before the request so the duration sent to Joule
       // reflects the time that elapsed during the debounce interval.
@@ -762,7 +804,8 @@ class BleJouleView extends React.Component<BleJouleViewProps, any> {
         pausedTimerSeconds: 0,
       })
     } catch (error) {
-      this.setState({ error: error.message || String(error) })
+      this.cookRestartInProgress = false
+      this.setState({ cookRestarting: false, error: error.message || String(error) })
     } finally {
       this.setState({ timerExtensionUpdating: false })
     }
@@ -818,7 +861,6 @@ class BleJouleView extends React.Component<BleJouleViewProps, any> {
   private isAtOrAboveTarget(state) {
     const data: JouleData = state.data
     return data &&
-      [1, 2, 3].indexOf(data.programStep) !== -1 &&
       state.activeSetPoint !== null &&
       data.bathTemp >= state.activeSetPoint
   }
@@ -827,7 +869,8 @@ class BleJouleView extends React.Component<BleJouleViewProps, any> {
     const cookTime = this.state.pendingTimerSeconds
     if (cookTime <= 0) return
 
-    this.setState({ timerStarting: true, error: "" })
+    this.cookRestartInProgress = true
+    this.setState({ timerStarting: true, cookRestarting: true, error: "" })
     try {
       // Timers selected while preheating stay local until this point because
       // Joule otherwise begins counting down immediately.
@@ -843,7 +886,12 @@ class BleJouleView extends React.Component<BleJouleViewProps, any> {
         timerStartFailed: false,
       })
     } catch (error) {
-      this.setState({ error: error.message || String(error), timerStartFailed: true })
+      this.cookRestartInProgress = false
+      this.setState({
+        cookRestarting: false,
+        error: error.message || String(error),
+        timerStartFailed: true,
+      })
     } finally {
       this.setState({ timerStarting: false })
     }
@@ -875,6 +923,7 @@ class BleJouleView extends React.Component<BleJouleViewProps, any> {
       return
     }
 
+    this.disconnectRequested = true
     this.client.disconnect()
     this.setState({
       developerMode: true,
@@ -944,8 +993,79 @@ class BleJouleView extends React.Component<BleJouleViewProps, any> {
       this.toggleDeveloperMode()
       return
     }
+    this.disconnectRequested = true
     this.client.forgetPairing()
     this.client.disconnect()
+  }
+
+  private resetDisconnectedState = () => {
+    this.clearTimerExtensionUpdate()
+    this.cookRestartInProgress = false
+    this.setState({
+      connected: false,
+      connecting: false,
+      data: null,
+      dataReceivedAt: 0,
+      timerDuration: 0,
+      timerEndsAt: 0,
+      pendingTimerSeconds: 0,
+      timerPaused: false,
+      pausedTimerSeconds: 0,
+      timerStarting: false,
+      cookRestarting: false,
+      timerExtensionUpdating: false,
+      timerStartFailed: false,
+      activeSetPoint: null,
+      timeAtTemperatureStartedAt: 0,
+      timeAtTemperatureSeconds: 0,
+      timeAtTemperaturePending: false,
+      showDisconnectConfirmation: false,
+      reconnecting: false,
+      reconnectError: "",
+      starting: false,
+      status: "Connect directly to a nearby Joule over Bluetooth.",
+    })
+  }
+
+  private handleConnectionLost = () => {
+    if (this.disconnectRequested || this.state.developerMode) {
+      this.disconnectRequested = false
+      this.resetDisconnectedState()
+      return
+    }
+    this.beginReconnection()
+  }
+
+  private beginReconnection = () => {
+    if (this.reconnectInProgress) return
+    this.reconnectInProgress = true
+    this.setState({
+      reconnecting: true,
+      reconnectError: "",
+      error: "",
+      status: "Connection interrupted. Reconnecting to Joule...",
+    }, this.reconnectToJoule)
+  }
+
+  private reconnectToJoule = async () => {
+    try {
+      await this.client.reconnect()
+      this.setState({
+        connected: true,
+        reconnecting: false,
+        reconnectError: "",
+        error: "",
+        status: "Connected to Joule.",
+      })
+    } catch (error) {
+      this.setState({
+        reconnecting: true,
+        reconnectError: error.message || String(error),
+        status: "Joule could not reconnect automatically.",
+      })
+    } finally {
+      this.reconnectInProgress = false
+    }
   }
 
   private handleTimerSegmentChange = (field: "cookHours" | "cookMinutes" | "cookSeconds", value: string) => {

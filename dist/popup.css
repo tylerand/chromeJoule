@@ -942,23 +942,27 @@ body, button, input {
   z-index: 10;
 }
 
-.disconnect-dialog {
+.disconnect-dialog,
+.reconnect-dialog {
   max-width: 440px;
   width: 100%;
 }
 
-.disconnect-dialog h2 {
+.disconnect-dialog h2,
+.reconnect-dialog h2 {
   font-size: 23px;
   margin: 0 0 10px;
 }
 
-.disconnect-dialog p {
+.disconnect-dialog p,
+.reconnect-dialog p {
   color: #65716e;
   line-height: 1.5;
   margin: 0;
 }
 
-.controller.dark .disconnect-dialog p {
+.controller.dark .disconnect-dialog p,
+.controller.dark .reconnect-dialog p {
   color: #c0d0cc;
 }
 

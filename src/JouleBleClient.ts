@@ -234,6 +234,7 @@ export default class JouleBleClient {
   private authKey: Uint8Array | null
   private latestData: JouleData
   private readQueue: Promise<void> = Promise.resolve()
+  private refreshCompletion: Promise<void> | null = null
   private recipientAddresses: Uint8Array[] = []
   private currentSetPoint: number | null
   private startRequestInProgress = false
@@ -285,7 +286,25 @@ export default class JouleBleClient {
     } catch (error) {
       console.info("Joule advertiser data is unavailable on this Bluetooth adapter.", error)
     }
-    onStatus("Connecting to Joule...")
+    await this.establishConnection()
+  }
+
+  public async reconnect() {
+    if (!this.device) throw new Error("Choose a Joule before reconnecting.")
+    if (this.server && this.server.connected) return
+
+    this.statusListener("Reconnecting to Joule...")
+    try {
+      await this.establishConnection()
+    } catch (error) {
+      this.connected = false
+      if (this.server && this.server.connected) this.server.disconnect()
+      throw error
+    }
+  }
+
+  private async establishConnection() {
+    this.statusListener("Connecting to Joule...")
     this.server = await this.device.gatt.connect()
     this.connected = true
     const service = await this.server.getPrimaryService(JOULE_SERVICE_UUID)
@@ -310,11 +329,11 @@ export default class JouleBleClient {
     const storageKey = AUTH_KEY_PREFIX + this.device.id
     const savedKey = localStorage.getItem(storageKey)
     if (savedKey) {
-      onStatus("Authorizing Joule...")
+      this.statusListener("Authorizing Joule...")
       this.authKey = hexToKey(savedKey)
       await this.submitKey()
     } else {
-      onStatus("Press the button on top of your Joule within 60 seconds to pair.")
+      this.statusListener("Press the button on top of your Joule within 60 seconds to pair.")
       const keyReply = await this.sendAndWait(streamMessage(field.startKeyExchangeRequest), field.startKeyExchangeReply, 60000)
       if (!keyReply.key || keyReply.result !== 0) throw new Error("Joule key exchange was rejected.")
       this.authKey = keyReply.key
@@ -324,7 +343,7 @@ export default class JouleBleClient {
 
     await this.startLiveFeed(true)
     await this.loadCurrentProgram()
-    onStatus("Connected to Joule.")
+    this.statusListener("Connected to Joule.")
   }
 
   public async startProgram(setPoint: number, cookTime: number) {
@@ -332,6 +351,7 @@ export default class JouleBleClient {
     if (this.startRequestInProgress) throw new Error("Joule is already processing a cook request.")
     this.startRequestInProgress = true
     try {
+      await this.waitForRefresh()
       await this.startLiveFeed(true)
       await this.write(streamMessage(field.identifyCirculatorRequest))
       await this.delay(500)
@@ -416,6 +436,7 @@ export default class JouleBleClient {
 
   public async stopProgram() {
     this.requireConnection()
+    await this.waitForRefresh()
     const reply = await this.sendAndWait(streamMessage(field.stopCirculatorRequest), field.stopCirculatorReply, 10000)
     if (reply.result !== 0) throw new Error(`Joule rejected the stop request (result ${reply.result}).`)
     if (this.latestData) {
@@ -426,8 +447,15 @@ export default class JouleBleClient {
 
   public async refreshLiveData() {
     this.requireConnection()
-    if (this.startRequestInProgress) return
-    await this.startLiveFeed()
+    if (this.startRequestInProgress || this.refreshCompletion) return
+
+    const refresh = this.startLiveFeed()
+    this.refreshCompletion = refresh
+    try {
+      await refresh
+    } finally {
+      if (this.refreshCompletion === refresh) this.refreshCompletion = null
+    }
   }
 
   public async setTimer(cookTime: number) {
@@ -611,6 +639,10 @@ export default class JouleBleClient {
       if (this.latestData && this.latestData.sequenceNumber !== previousSequenceNumber) return
       await this.delay(100)
     }
+  }
+
+  private async waitForRefresh() {
+    if (this.refreshCompletion) await this.refreshCompletion
   }
 
   private cookId() {
