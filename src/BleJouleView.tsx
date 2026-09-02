@@ -57,6 +57,8 @@ class BleJouleView extends React.Component<BleJouleViewProps, any> {
     timeAtTemperatureSeconds: 0,
     timeAtTemperaturePending: false,
     now: Date.now(),
+    uiFrozen: false,
+    frozenView: null,
   }
 
   public componentDidMount() {
@@ -108,6 +110,10 @@ class BleJouleView extends React.Component<BleJouleViewProps, any> {
             timerEndsAt: this.initialTimerEnd(data),
             activeSetPoint: data.setPoint === undefined ? this.state.activeSetPoint : data.setPoint,
             cookRestarting: programIsActive ? false : preserveCookState,
+            // Joule reports a transient stopped program while it applies a
+            // restart; wait for telemetry confirming the program is active
+            // again before unfreezing the dashboard so nothing visibly resets.
+            ...(programIsActive ? { uiFrozen: false, frozenView: null } : {}),
           })
         },
         this.handleConnectionLost,
@@ -229,43 +235,80 @@ class BleJouleView extends React.Component<BleJouleViewProps, any> {
     })
   }
 
-  public render() {
-    const data: JouleData = this.state.data
+  // Computes every value the dashboard renders from cook/timer state. Pulled
+  // out of render() so a snapshot can be captured and reused while the UI is
+  // frozen across a Joule restart (see freezeDashboard/unfreezeDashboard).
+  private deriveDashboardView(state: any) {
+    const data: JouleData = state.data
     const temperature = data ? this.displayTemperature(data.bathTemp) : "Awaiting live data"
     const isCooking = data && (
       [1, 2, 3].indexOf(data.programStep) !== -1 ||
-      this.state.cookRestarting ||
+      state.cookRestarting ||
       this.cookRestartInProgress
     )
-    const timeRemaining = this.state.timerEndsAt > 0
-      ? Math.max(0, Math.ceil((this.state.timerEndsAt - this.state.now) / 1000))
-      : data ? Math.max(0, data.timeRemaining - Math.floor((this.state.now - this.state.dataReceivedAt) / 1000)) : 0
-    const timerDuration = this.state.timerDuration || (data && data.cookTime) || 0
-    const hasTimer = isCooking && timerDuration > 0 && this.state.pendingTimerSeconds === 0 && !this.state.timerPaused
-    const timerIsPending = isCooking && this.state.pendingTimerSeconds > 0
-    const timerIsPaused = isCooking && this.state.timerPaused
+    const timeRemaining = state.timerEndsAt > 0
+      ? Math.max(0, Math.ceil((state.timerEndsAt - state.now) / 1000))
+      : data ? Math.max(0, data.timeRemaining - Math.floor((state.now - state.dataReceivedAt) / 1000)) : 0
+    const timerDuration = state.timerDuration || (data && data.cookTime) || 0
+    const hasTimer = isCooking && timerDuration > 0 && state.pendingTimerSeconds === 0 && !state.timerPaused
+    const timerIsPending = isCooking && state.pendingTimerSeconds > 0
+    const timerIsPaused = isCooking && state.timerPaused
     const displayedTimerSeconds = hasTimer
       ? timeRemaining
       : timerIsPaused
-        ? this.state.pausedTimerSeconds
-        : timerIsPending ? this.state.pendingTimerSeconds : 0
+        ? state.pausedTimerSeconds
+        : timerIsPending ? state.pendingTimerSeconds : 0
     const timerProgress = hasTimer || timerIsPending || timerIsPaused ? Math.min(1, displayedTimerSeconds / timerDuration) : 1
-    const selectedTemperature = parseFloat(this.state.setPoint)
-    const targetTemperature = this.state.isCelsius ? selectedTemperature : (selectedTemperature - 32) / 1.8
-    const appliedTargetTemperature = isCooking && this.state.activeSetPoint !== null
-      ? this.state.activeSetPoint
+    const selectedTemperature = parseFloat(state.setPoint)
+    const targetTemperature = state.isCelsius ? selectedTemperature : (selectedTemperature - 32) / 1.8
+    const appliedTargetTemperature = isCooking && state.activeSetPoint !== null
+      ? state.activeSetPoint
       : targetTemperature
-    const hasReachedTarget = this.state.timeAtTemperatureStartedAt > 0 || this.state.timeAtTemperatureSeconds > 0
+    const hasReachedTarget = state.timeAtTemperatureStartedAt > 0 || state.timeAtTemperatureSeconds > 0
     const phase = this.cookPhase(isCooking, data, appliedTargetTemperature, hasReachedTarget)
-    const isAtOrAboveTarget = this.isAtOrAboveTarget(this.state)
+    const isAtOrAboveTarget = this.isAtOrAboveTarget(state)
     const temperatureDirection = phase === "Preheating" ? "up" : phase === "Cooling" ? "down" : ""
-    const timeAtTemperature = this.state.timeAtTemperatureSeconds +
-      (this.state.timeAtTemperatureStartedAt > 0
-        ? Math.max(0, Math.floor((this.state.now - this.state.timeAtTemperatureStartedAt) / 1000))
+    const timeAtTemperature = state.timeAtTemperatureSeconds +
+      (state.timeAtTemperatureStartedAt > 0
+        ? Math.max(0, Math.floor((state.now - state.timeAtTemperatureStartedAt) / 1000))
         : 0)
     const canUpdateTemperature = isCooking &&
       isFinite(targetTemperature) &&
-      (this.state.activeSetPoint === null || Math.abs(targetTemperature - this.state.activeSetPoint) > 0.05)
+      (state.activeSetPoint === null || Math.abs(targetTemperature - state.activeSetPoint) > 0.05)
+
+    return {
+      data, temperature, isCooking, timeRemaining, timerDuration, hasTimer, timerIsPending, timerIsPaused,
+      displayedTimerSeconds, timerProgress, selectedTemperature, targetTemperature, appliedTargetTemperature,
+      hasReachedTarget, phase, isAtOrAboveTarget, temperatureDirection, timeAtTemperature, canUpdateTemperature,
+    }
+  }
+
+  // Restarting Joule's program (resuming a paused timer, moving from
+  // preheating to an active timer, updating the target temperature, or
+  // extending the timer) makes Joule briefly report a stopped program before
+  // it confirms the new program. Rather than let the dashboard flash through
+  // that transient "reset" state, freeze the dashboard's rendered values at
+  // the moment the restart begins and only let them update again once fresh
+  // telemetry confirms the program is active again (see unfreezeDashboard).
+  private freezeDashboard() {
+    if (this.state.developerMode || this.state.uiFrozen) return
+    this.setState({ uiFrozen: true, frozenView: this.deriveDashboardView(this.state) })
+  }
+
+  private unfreezeDashboard(extraState: any = {}) {
+    if (!this.state.uiFrozen) {
+      this.setState(extraState)
+      return
+    }
+    this.setState({ ...extraState, uiFrozen: false, frozenView: null })
+  }
+
+  public render() {
+    const {
+      data, temperature, isCooking, timerDuration, hasTimer, timerIsPending, timerIsPaused,
+      displayedTimerSeconds, timerProgress, targetTemperature, phase, isAtOrAboveTarget,
+      temperatureDirection, timeAtTemperature, canUpdateTemperature,
+    } = this.state.uiFrozen && this.state.frozenView ? this.state.frozenView : this.deriveDashboardView(this.state)
 
     return (
       <div className="content">
@@ -656,6 +699,7 @@ class BleJouleView extends React.Component<BleJouleViewProps, any> {
       return
     }
     this.cookRestartInProgress = true
+    this.freezeDashboard()
     this.setState({
       starting: true,
       cookRestarting: true,
@@ -679,7 +723,7 @@ class BleJouleView extends React.Component<BleJouleViewProps, any> {
       })
     } catch (error) {
       this.cookRestartInProgress = false
-      this.setState({ cookRestarting: false, error: error.message || String(error) })
+      this.unfreezeDashboard({ cookRestarting: false, error: error.message || String(error) })
     } finally {
       this.setState({ starting: false })
     }
@@ -716,6 +760,7 @@ class BleJouleView extends React.Component<BleJouleViewProps, any> {
     const timerDuration = this.state.timerDuration || remainingSeconds
 
     this.cookRestartInProgress = true
+    this.freezeDashboard()
     this.setState({
       timerStarting: true,
       cookRestarting: true,
@@ -738,7 +783,7 @@ class BleJouleView extends React.Component<BleJouleViewProps, any> {
       })
     } catch (error) {
       this.cookRestartInProgress = false
-      this.setState({
+      this.unfreezeDashboard({
         cookRestarting: false,
         error: error.message || String(error),
         status: "Timer remains paused.",
@@ -791,6 +836,7 @@ class BleJouleView extends React.Component<BleJouleViewProps, any> {
     if (remainingSeconds <= 0) return
 
     this.cookRestartInProgress = true
+    this.freezeDashboard()
     this.setState({ timerExtensionUpdating: true, cookRestarting: true })
     try {
       // Recalculate just before the request so the duration sent to Joule
@@ -805,7 +851,7 @@ class BleJouleView extends React.Component<BleJouleViewProps, any> {
       })
     } catch (error) {
       this.cookRestartInProgress = false
-      this.setState({ cookRestarting: false, error: error.message || String(error) })
+      this.unfreezeDashboard({ cookRestarting: false, error: error.message || String(error) })
     } finally {
       this.setState({ timerExtensionUpdating: false })
     }
@@ -870,6 +916,7 @@ class BleJouleView extends React.Component<BleJouleViewProps, any> {
     if (cookTime <= 0) return
 
     this.cookRestartInProgress = true
+    this.freezeDashboard()
     this.setState({ timerStarting: true, cookRestarting: true, error: "" })
     try {
       // Timers selected while preheating stay local until this point because
@@ -887,7 +934,7 @@ class BleJouleView extends React.Component<BleJouleViewProps, any> {
       })
     } catch (error) {
       this.cookRestartInProgress = false
-      this.setState({
+      this.unfreezeDashboard({
         cookRestarting: false,
         error: error.message || String(error),
         timerStartFailed: true,
@@ -1024,6 +1071,8 @@ class BleJouleView extends React.Component<BleJouleViewProps, any> {
       reconnectError: "",
       starting: false,
       status: "Connect directly to a nearby Joule over Bluetooth.",
+      uiFrozen: false,
+      frozenView: null,
     })
   }
 
