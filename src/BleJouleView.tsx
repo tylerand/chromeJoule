@@ -110,10 +110,6 @@ class BleJouleView extends React.Component<BleJouleViewProps, any> {
             timerEndsAt: this.initialTimerEnd(data),
             activeSetPoint: data.setPoint === undefined ? this.state.activeSetPoint : data.setPoint,
             cookRestarting: programIsActive ? false : preserveCookState,
-            // Joule reports a transient stopped program while it applies a
-            // restart; wait for telemetry confirming the program is active
-            // again before unfreezing the dashboard so nothing visibly resets.
-            ...(programIsActive ? { uiFrozen: false, frozenView: null } : {}),
           })
         },
         this.handleConnectionLost,
@@ -286,10 +282,12 @@ class BleJouleView extends React.Component<BleJouleViewProps, any> {
   // Restarting Joule's program (resuming a paused timer, moving from
   // preheating to an active timer, updating the target temperature, or
   // extending the timer) makes Joule briefly report a stopped program before
-  // it confirms the new program. Rather than let the dashboard flash through
-  // that transient "reset" state, freeze the dashboard's rendered values at
-  // the moment the restart begins and only let them update again once fresh
-  // telemetry confirms the program is active again (see unfreezeDashboard).
+  // it confirms the new program - and telemetry can arrive out of order, so a
+  // stray "still stopped" packet can land after an "active again" one. Rather
+  // than trust telemetry to say when the restart is done, freeze the
+  // dashboard's rendered values the moment the restart begins and only let
+  // them update again once the triggering action itself completes (success
+  // or failure), so nothing visibly resets in between.
   private freezeDashboard() {
     if (this.state.developerMode || this.state.uiFrozen) return
     this.setState({ uiFrozen: true, frozenView: this.deriveDashboardView(this.state) })
@@ -708,7 +706,7 @@ class BleJouleView extends React.Component<BleJouleViewProps, any> {
     })
     try {
       const timed = await this.client.updateSetPoint(setPoint, startsTimerImmediately ? cookTime : 0)
-      this.setState({
+      this.unfreezeDashboard({
         setPoint: input.toFixed(1),
         activeSetPoint: setPoint,
         timerDuration: cookTime > 0 ? this.state.timerDuration || cookTime : 0,
@@ -772,7 +770,7 @@ class BleJouleView extends React.Component<BleJouleViewProps, any> {
         const timed = await this.client.setTimer(remainingSeconds)
         if (!timed) throw new Error("Joule restarted, but did not accept the resumed timer.")
       }
-      this.setState({
+      this.unfreezeDashboard({
         data: this.state.developerMode ? this.mockData(1, this.state.activeSetPoint, remainingSeconds) : this.state.data,
         timerDuration,
         timerEndsAt: Date.now() + (remainingSeconds * 1000),
@@ -842,7 +840,7 @@ class BleJouleView extends React.Component<BleJouleViewProps, any> {
       // Recalculate just before the request so the duration sent to Joule
       // reflects the time that elapsed during the debounce interval.
       await this.client.setTimer(remainingSeconds)
-      this.setState({
+      this.unfreezeDashboard({
         error: "",
         status: "Timer updated.",
         timerEndsAt: Date.now() + (remainingSeconds * 1000),
@@ -922,7 +920,7 @@ class BleJouleView extends React.Component<BleJouleViewProps, any> {
       // Timers selected while preheating stay local until this point because
       // Joule otherwise begins counting down immediately.
       if (!this.state.developerMode) await this.client.setTimer(cookTime)
-      this.setState({
+      this.unfreezeDashboard({
         data: this.state.developerMode ? this.mockData(1, this.state.activeSetPoint, cookTime) : this.state.data,
         status: this.state.developerMode ? "Mock timer started." : "Timer started at the target temperature.",
         timerDuration: this.state.timerDuration || cookTime,
