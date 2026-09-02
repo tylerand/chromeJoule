@@ -1,5 +1,5 @@
 import * as React from "react"
-import * as ReactDOM from "react-dom"
+import { createRoot } from "react-dom/client"
 import BleJouleView from "./BleJouleView"
 
 // Theme state belongs at the application root so the controller can remain
@@ -20,4 +20,8 @@ class Main extends React.Component<{}, { darkMode: boolean }> {
   }
 }
 
-ReactDOM.render(<Main />, document.getElementById("content"))
+const container = document.getElementById("content")
+
+if (!container) throw new Error("Controller mount element was not found.")
+
+createRoot(container).render(<Main />)
