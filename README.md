@@ -48,11 +48,12 @@ The extension opens a browser-based controller and communicates with Joule's Blu
 
 ## Developer mode
 
-Use the **Developer mode** switch in the controller header to test the connected
-dashboard without a Joule. It simulates a connected cooker locally and moves
-the water temperature toward the selected target while exercising the same
-start, stop, timer, and temperature-update controls. Developer mode never
-opens a Bluetooth connection or sends commands to a device.
+Developer mode is disabled in the production build. Set
+`DEVELOPER_MODE_ENABLED` to `true` in `src/BleJouleView.tsx` for local UI
+testing without a Joule. It simulates a connected cooker locally and moves the
+water temperature toward the selected target while exercising the same start,
+stop, timer, and temperature-update controls. Developer mode never opens a
+Bluetooth connection or sends commands to a device.
 
 ## Timers, temperature changes, and notifications
 

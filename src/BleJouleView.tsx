@@ -3,6 +3,10 @@ import JouleBleClient, { JouleData } from "./JouleBleClient"
 
 declare const chrome: any
 
+// Keep the simulator out of production builds unless it is explicitly enabled
+// for local development.
+const DEVELOPER_MODE_ENABLED = false
+
 interface BleJouleViewProps {
   darkMode: boolean
   onToggleDarkMode: () => void
@@ -271,16 +275,17 @@ class BleJouleView extends React.Component<BleJouleViewProps, any> {
             <h1>Chrome Joule</h1>
           </div>
           <div className="header-controls">
-            <button
-              className={`developer-toggle ${this.state.developerMode ? "enabled" : ""}`}
-              type="button"
-              role="switch"
-              aria-checked={this.state.developerMode}
-              onClick={this.toggleDeveloperMode}
-            >
-              <span>Developer mode</span>
-              <span className="developer-toggle-track"><span /></span>
-            </button>
+            {DEVELOPER_MODE_ENABLED &&
+              <button
+                className={`developer-toggle ${this.state.developerMode ? "enabled" : ""}`}
+                type="button"
+                role="switch"
+                aria-checked={this.state.developerMode}
+                onClick={this.toggleDeveloperMode}
+              >
+                <span>Developer mode</span>
+                <span className="developer-toggle-track"><span /></span>
+              </button>}
             <button
               className={`theme-toggle ${this.props.darkMode ? "dark" : "light"}`}
               type="button"
@@ -845,6 +850,8 @@ class BleJouleView extends React.Component<BleJouleViewProps, any> {
   }
 
   private toggleDeveloperMode = () => {
+    if (!DEVELOPER_MODE_ENABLED) return
+
     if (this.state.developerMode) {
       this.setState({
         developerMode: false,
