@@ -434,7 +434,7 @@ class BleJouleView extends React.Component<BleJouleViewProps, any> {
                           placeholder="Add a timer"
                           aria-label="Cook time in minutes and seconds"
                         />
-                        <b>min:sec</b>
+                        <b>min</b>
                       </div>
                       {(hasTimer || timerIsPending) &&
                         <div className="timer-add-actions">
