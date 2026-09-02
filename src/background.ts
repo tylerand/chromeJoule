@@ -1,7 +1,7 @@
 declare const chrome: any
 
-// Keep the alarm name and notification ID identical so a timely foreground
-// notification replaces the background-alarm fallback instead of duplicating it.
+// The alarm and notification share an ID so each completed timer has one
+// replaceable notification.
 const timerCompletionAlarm = "joule-timer-complete"
 
 chrome.action.onClicked.addListener(() => {
@@ -9,17 +9,30 @@ chrome.action.onClicked.addListener(() => {
 })
 
 const showTimerCompletionNotification = () => {
-  chrome.notifications.create(timerCompletionAlarm, {
+  const createNotification = () => chrome.notifications.create(timerCompletionAlarm, {
     type: "basic",
-    iconUrl: chrome.runtime.getURL("icon.png"),
+    iconUrl: chrome.runtime.getURL("icon-128.png"),
     title: "Joule timer complete",
     message: "Your cook timer has reached zero.",
-  }).catch((error) => console.error("Could not show timer-complete notification.", error))
+  }, () => {
+    if (chrome.runtime.lastError) {
+      console.error("Could not show timer-complete notification.", chrome.runtime.lastError.message)
+    }
+  })
+
+  // Windows treats a notification with an existing ID as an update and does
+  // not show a new toast. Clearing it first guarantees a fresh alert.
+  chrome.notifications.clear(timerCompletionAlarm, () => {
+    if (chrome.runtime.lastError) {
+      console.error("Could not clear the prior timer notification.", chrome.runtime.lastError.message)
+    }
+    createNotification()
+  })
 }
 
 chrome.runtime.onMessage.addListener((message) => {
-  // The controller owns the visible countdown and tells the service worker when
-  // its deadline changes. Alarms continue running when the controller tab closes.
+  // The controller mirrors its current deadline so Chrome can wake this worker
+  // and notify after the controller tab has closed.
   if (message.type === "timer-scheduled") {
     chrome.alarms.create(timerCompletionAlarm, { when: message.endsAt })
     return
@@ -27,16 +40,10 @@ chrome.runtime.onMessage.addListener((message) => {
 
   if (message.type === "timer-cleared") {
     chrome.alarms.clear(timerCompletionAlarm)
-    return
   }
-
-  if (message.type !== "timer-complete") return
-
-  chrome.alarms.clear(timerCompletionAlarm)
-  showTimerCompletionNotification()
 })
 
 chrome.alarms.onAlarm.addListener((alarm) => {
-  // A timer completion can be missed by a throttled or closed controller page.
+  // Chrome wakes the service worker for its own scheduled alarm.
   if (alarm.name === timerCompletionAlarm) showTimerCompletionNotification()
 })

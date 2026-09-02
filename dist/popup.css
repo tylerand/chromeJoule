@@ -756,7 +756,7 @@ body, button, input {
 
 .btn-danger {
   background: transparent;
-  color: #e76f51;
+  color: #ff8b73;
   border-color: #fcece8;
 }
 
@@ -766,12 +766,12 @@ body, button, input {
 
 .btn-pause {
   background: transparent;
-  border-color: #d7ebf5;
-  color: #3788b4;
+  border-color: #fcece8;
+  color: #e76f51;
 }
 
 .btn-pause:hover:not(:disabled) {
-  background: #e7f3f8;
+  background: #fcece8;
 }
 
 .btn-resume {

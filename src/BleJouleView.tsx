@@ -13,7 +13,6 @@ class BleJouleView extends React.Component<BleJouleViewProps, any> {
   private clockInterval: number
   private temperatureRefreshInterval: number
   private timerExtensionTimeout = 0
-  private timerCompletionNotified = false
   private hoursInput: HTMLInputElement | null = null
   private minutesInput: HTMLInputElement | null = null
   private secondsInput: HTMLInputElement | null = null
@@ -764,24 +763,9 @@ class BleJouleView extends React.Component<BleJouleViewProps, any> {
     }
   }
 
-  private timerSecondsForState(state) {
-    if (state.timerPaused) return state.pausedTimerSeconds
-    const data: JouleData = state.data
-    if (state.timerEndsAt > 0) return Math.max(0, Math.ceil((state.timerEndsAt - state.now) / 1000))
-    if (!data) return 0
-    return Math.max(0, data.timeRemaining - Math.floor((state.now - state.dataReceivedAt) / 1000))
-  }
-
   public componentDidUpdate(_previousProps, previousState) {
-    const previousTimerSeconds = this.timerSecondsForState(previousState)
-    const currentTimerSeconds = this.timerSecondsForState(this.state)
-    if (currentTimerSeconds > 0) this.timerCompletionNotified = false
-    if (previousTimerSeconds > 0 && currentTimerSeconds === 0 && !this.timerCompletionNotified) {
-      this.timerCompletionNotified = true
-      chrome.runtime.sendMessage({ type: "timer-complete" })
-    }
-    // Mirror every locally tracked deadline to the service-worker alarm. The
-    // foreground transition remains a precise notification path when open.
+    // The service-worker alarm is the single completion-notification source.
+    // Unlike an in-page countdown, it remains reliable after this tab closes.
     if (this.state.timerEndsAt !== previousState.timerEndsAt) {
       chrome.runtime.sendMessage(
         this.state.timerEndsAt > 0
