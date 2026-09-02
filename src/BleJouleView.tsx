@@ -14,6 +14,9 @@ class BleJouleView extends React.Component<BleJouleViewProps, any> {
   private temperatureRefreshInterval: number
   private timerExtensionTimeout = 0
   private timerCompletionNotified = false
+  private hoursInput: HTMLInputElement | null = null
+  private minutesInput: HTMLInputElement | null = null
+  private secondsInput: HTMLInputElement | null = null
 
   public state = {
     status: "Connect directly to a nearby Joule over Bluetooth.",
@@ -21,7 +24,9 @@ class BleJouleView extends React.Component<BleJouleViewProps, any> {
     connecting: false,
     developerMode: false,
     setPoint: "",
-    cookTime: "",
+    cookHours: "",
+    cookMinutes: "",
+    cookSeconds: "",
     isCelsius: false,
     data: null,
     error: "",
@@ -117,7 +122,7 @@ class BleJouleView extends React.Component<BleJouleViewProps, any> {
     this.setState({ starting: true, status: "Sending cook request...", error: "" })
     const input = parseFloat(this.state.setPoint)
     const setPoint = this.state.isCelsius ? input : (input - 32) / 1.8
-    const cookTime = this.state.cookTime === "" ? 0 : this.parseCookTime(this.state.cookTime)
+    const cookTime = this.getEnteredCookTimeSeconds()
     if (!isFinite(setPoint) || setPoint < 0 || setPoint > 100) {
       this.setState({ starting: false, error: "Enter a target temperature from 0 to 100°C." })
       return
@@ -138,7 +143,7 @@ class BleJouleView extends React.Component<BleJouleViewProps, any> {
         error: "",
         status: timed ? "Timed cook started." : cookTime > 0 ? "Cook started. The timer will begin at the target temperature." : "Cook started without a device timer.",
         setPoint: input.toFixed(1),
-        cookTime: cookTime > 0 ? this.formatDuration(cookTime) : "",
+        ...this.formattedTimerState(cookTime),
         timerDuration: cookTime,
         timerEndsAt: timed ? Date.now() + (cookTime * 1000) : 0,
         pendingTimerSeconds: timed ? 0 : cookTime,
@@ -205,7 +210,7 @@ class BleJouleView extends React.Component<BleJouleViewProps, any> {
   public setTimer = async () => {
     // A manual timer value supersedes a queued +5 update.
     this.clearTimerExtensionUpdate()
-    const cookTime = this.parseCookTime(this.state.cookTime)
+    const cookTime = this.getEnteredCookTimeSeconds()
     if (!isFinite(cookTime) || cookTime <= 0 || cookTime > 86400) {
       this.setState({ error: "Enter a cook time from 1 second to 24 hours." })
       return
@@ -214,7 +219,7 @@ class BleJouleView extends React.Component<BleJouleViewProps, any> {
     this.setState({
       error: "",
       status: startsTimerImmediately ? "Starting timer at the target temperature..." : "Timer saved. It will begin at the target temperature.",
-      cookTime: this.formatDuration(cookTime),
+      ...this.formattedTimerState(cookTime),
       timerDuration: cookTime,
       timerEndsAt: 0,
       pendingTimerSeconds: cookTime,
@@ -421,20 +426,62 @@ class BleJouleView extends React.Component<BleJouleViewProps, any> {
                     </div>
                   )}
 
-                  <label className="setting-field timer-setting">
+                  <div className="setting-field timer-setting">
                     <span>Set timer <em>Optional</em></span>
                     <div className="timer-input-row">
                       <div className="timer-input">
-                        <input
-                          type="text"
-                          inputMode="text"
-                          pattern="[0-9:]*"
-                          value={this.state.cookTime}
-                          onChange={(event) => this.setState({ cookTime: event.target.value })}
-                          placeholder="Add a timer"
-                          aria-label="Cook time in minutes and seconds"
-                        />
-                        <b>min</b>
+                        <div className="timer-segmented-input" role="group" aria-label="Cook timer duration">
+                          <div className="timer-segment">
+                            <input
+                              ref={(el) => { this.hoursInput = el }}
+                              type="text"
+                              inputMode="numeric"
+                              pattern="[0-9]*"
+                              maxLength={2}
+                              value={this.state.cookHours}
+                              onChange={(event) => this.handleTimerSegmentChange("cookHours", event.target.value)}
+                              onKeyDown={(event) => this.handleTimerKeyDown("cookHours", event)}
+                              onPaste={this.handleTimerPaste}
+                              placeholder="00"
+                              aria-label="Hours"
+                            />
+                            <span className="segment-label">hr</span>
+                          </div>
+                          <span className="timer-separator" aria-hidden="true">:</span>
+                          <div className="timer-segment">
+                            <input
+                              ref={(el) => { this.minutesInput = el }}
+                              type="text"
+                              inputMode="numeric"
+                              pattern="[0-9]*"
+                              maxLength={2}
+                              value={this.state.cookMinutes}
+                              onChange={(event) => this.handleTimerSegmentChange("cookMinutes", event.target.value)}
+                              onKeyDown={(event) => this.handleTimerKeyDown("cookMinutes", event)}
+                              onPaste={this.handleTimerPaste}
+                              placeholder="00"
+                              aria-label="Minutes"
+                            />
+                            <span className="segment-label">min</span>
+                          </div>
+                          <span className="timer-separator" aria-hidden="true">:</span>
+                          <div className="timer-segment">
+                            <input
+                              ref={(el) => { this.secondsInput = el }}
+                              type="text"
+                              inputMode="numeric"
+                              pattern="[0-9]*"
+                              maxLength={2}
+                              value={this.state.cookSeconds}
+                              onChange={(event) => this.handleTimerSegmentChange("cookSeconds", event.target.value)}
+                              onKeyDown={(event) => this.handleTimerKeyDown("cookSeconds", event)}
+                              onPaste={this.handleTimerPaste}
+                              placeholder="00"
+                              aria-label="Seconds"
+                            />
+                            <span className="segment-label">sec</span>
+                          </div>
+                        </div>
                       </div>
                       {(hasTimer || timerIsPending) &&
                         <div className="timer-add-actions">
@@ -456,7 +503,7 @@ class BleJouleView extends React.Component<BleJouleViewProps, any> {
                           </button>
                         </div>}
                     </div>
-                  </label>
+                  </div>
                 </div>
                 {isCooking &&
                   <div className="panel-actions">
@@ -667,7 +714,7 @@ class BleJouleView extends React.Component<BleJouleViewProps, any> {
     const timerDuration = (this.state.timerDuration || currentSeconds) + additionalSeconds
     const nextTimerSeconds = currentSeconds + additionalSeconds
     this.setState({
-      cookTime: this.formatDuration(timerDuration),
+      ...this.formattedTimerState(timerDuration),
       timerDuration,
       timerEndsAt: timerIsRunning ? Date.now() + (nextTimerSeconds * 1000) : 0,
       pendingTimerSeconds: timerIsRunning ? 0 : nextTimerSeconds,
@@ -820,7 +867,9 @@ class BleJouleView extends React.Component<BleJouleViewProps, any> {
         connected: false,
         data: null,
         setPoint: "",
-        cookTime: "",
+        cookHours: "",
+        cookMinutes: "",
+        cookSeconds: "",
         timerDuration: 0,
         timerEndsAt: 0,
         pendingTimerSeconds: 0,
@@ -854,7 +903,7 @@ class BleJouleView extends React.Component<BleJouleViewProps, any> {
       error: "",
       status: startsTimerImmediately ? "Mock timed cook started." : cookTime > 0 ? "Mock cook started. The timer will begin at the target temperature." : "Mock cook started.",
       setPoint: input.toFixed(1),
-      cookTime: cookTime > 0 ? this.formatDuration(cookTime) : "",
+      ...this.formattedTimerState(cookTime),
       timerDuration: cookTime,
       timerEndsAt: startsTimerImmediately ? Date.now() + (cookTime * 1000) : 0,
       pendingTimerSeconds: startsTimerImmediately ? 0 : cookTime,
@@ -908,16 +957,90 @@ class BleJouleView extends React.Component<BleJouleViewProps, any> {
     this.client.disconnect()
   }
 
-  private parseCookTime(value: string) {
-    const parts = value.trim().split(":")
-    if (parts.length < 1 || parts.length > 3 || parts.some((part) => !/^\d+$/.test(part))) return NaN
+  private handleTimerSegmentChange = (field: "cookHours" | "cookMinutes" | "cookSeconds", value: string) => {
+    const digits = value.replace(/\D/g, "").slice(0, 2)
+    this.setState({ [field]: digits } as any, () => {
+      if (digits.length === 2) {
+        if (field === "cookHours" && this.minutesInput) {
+          this.minutesInput.focus()
+          this.minutesInput.select()
+        } else if (field === "cookMinutes" && this.secondsInput) {
+          this.secondsInput.focus()
+          this.secondsInput.select()
+        }
+      }
+    })
+  }
 
-    const values = parts.map((part) => parseInt(part, 10))
-    if (values.length === 1) return values[0] * 60
-    if (values.length === 2) return values[1] < 60 ? (values[0] * 60) + values[1] : NaN
-    return values[1] < 60 && values[2] < 60
-      ? (values[0] * 3600) + (values[1] * 60) + values[2]
-      : NaN
+  private handleTimerKeyDown = (field: "cookHours" | "cookMinutes" | "cookSeconds", event: React.KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === "Backspace" && !this.state[field]) {
+      if (field === "cookSeconds" && this.minutesInput) {
+        this.minutesInput.focus()
+      } else if (field === "cookMinutes" && this.hoursInput) {
+        this.hoursInput.focus()
+      }
+    } else if (event.key === "ArrowRight" && event.currentTarget.selectionStart === event.currentTarget.value.length) {
+      if (field === "cookHours" && this.minutesInput) {
+        this.minutesInput.focus()
+      } else if (field === "cookMinutes" && this.secondsInput) {
+        this.secondsInput.focus()
+      }
+    } else if (event.key === "ArrowLeft" && event.currentTarget.selectionStart === 0) {
+      if (field === "cookSeconds" && this.minutesInput) {
+        this.minutesInput.focus()
+      } else if (field === "cookMinutes" && this.hoursInput) {
+        this.hoursInput.focus()
+      }
+    }
+  }
+
+  private handleTimerPaste = (event: React.ClipboardEvent<HTMLInputElement>) => {
+    const text = event.clipboardData.getData("text").trim()
+    if (text.includes(":")) {
+      event.preventDefault()
+      const parts = text.split(":").map((part) => part.replace(/\D/g, ""))
+      if (parts.length === 2) {
+        this.setState({
+          cookHours: "00",
+          cookMinutes: (`0${parts[0]}`).slice(-2),
+          cookSeconds: (`0${parts[1]}`).slice(-2),
+        })
+      } else if (parts.length === 3) {
+        this.setState({
+          cookHours: (`0${parts[0]}`).slice(-2),
+          cookMinutes: (`0${parts[1]}`).slice(-2),
+          cookSeconds: (`0${parts[2]}`).slice(-2),
+        })
+      }
+    }
+  }
+
+  private getEnteredCookTimeSeconds(): number {
+    const { cookHours, cookMinutes, cookSeconds } = this.state
+    if (!cookHours && !cookMinutes && !cookSeconds) return 0
+
+    const h = cookHours ? parseInt(cookHours, 10) : 0
+    const m = cookMinutes ? parseInt(cookMinutes, 10) : 0
+    const s = cookSeconds ? parseInt(cookSeconds, 10) : 0
+
+    if (isNaN(h) || isNaN(m) || isNaN(s)) return NaN
+    if (h < 0 || m < 0 || s < 0) return NaN
+
+    return (h * 3600) + (m * 60) + s
+  }
+
+  private formattedTimerState(totalSeconds: number) {
+    if (totalSeconds <= 0) {
+      return { cookHours: "", cookMinutes: "", cookSeconds: "" }
+    }
+    const hours = Math.floor(totalSeconds / 3600)
+    const minutes = Math.floor((totalSeconds % 3600) / 60)
+    const seconds = totalSeconds % 60
+    return {
+      cookHours: (`0${hours}`).slice(-2),
+      cookMinutes: (`0${minutes}`).slice(-2),
+      cookSeconds: (`0${seconds}`).slice(-2),
+    }
   }
 
   private formatDuration(totalSeconds: number) {
