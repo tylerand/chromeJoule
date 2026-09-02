@@ -5,10 +5,11 @@ Chrome Joule is an unofficial Chrome extension for controlling a nearby Joule so
 ## Features
 
 - Direct Bluetooth connection to a nearby Joule
-- Manual cook controls for temperature and an optional device timer
+- Manual cook controls for temperature and an optional `hr : min : sec` device timer
 - Live water-temperature, cook-phase, and timer updates
 - Device timers and the time-at-temperature clock that begin when the bath reaches its selected temperature
 - Add five or thirty minutes to an active or pending timer without repeatedly restarting Joule
+- Pause the displayed timer while Joule continues to hold the target, then resume it with the preserved remaining time
 - Browser notification when a timer completes, including when the controller tab is closed
 - Fahrenheit and Celsius display modes
 
@@ -38,7 +39,8 @@ If Chrome cannot read the Joule advertiser data, enter its **Manufacturer Data**
 
 Selecting **Disconnect** deliberately removes the saved pairing key after
 confirmation. The next connection will require you to press the Joule's top
-button to pair again.
+button to pair again. In Developer mode, Disconnect ends only the simulated
+connection and retains any saved pairing key.
 
 ## How it works
 
@@ -55,10 +57,12 @@ opens a Bluetooth connection or sends commands to a device.
 ## Timers, temperature changes, and notifications
 
 A selected timer is held locally until the bath reaches the target temperature,
-then sent to the Joule and started. Raising the target during a timed cook
-preserves the remaining duration but pauses the timer until the new target is
-reached. Lowering the target below the current bath temperature immediately
-updates the device timer with the remaining duration.
+then sent to the Joule and started. The **Time at temperature** clock
+accumulates only while the water is at or above the active target. Raising the
+target during a timed cook preserves the remaining duration but pauses the
+timer until the new target is reached. Lowering the target below the current
+bath temperature immediately updates the device timer with the remaining
+duration.
 
 Once a timer is set, **+5 min** and **+30 min** immediately extend the
 displayed timer. When more than 30 seconds remain, Chrome Joule waits 30
