@@ -611,17 +611,40 @@ export default class JouleBleClient {
         }
       }, timeout)
     })
-    await this.write(payload)
+    try {
+      await this.write(payload)
+    } catch (error) {
+      // The write itself failed (including its own timeout below) - nothing
+      // will ever satisfy this reply, so release the slot immediately rather
+      // than leaving it pending until its own timer fires and blocking any
+      // command issued in between with "Joule is already processing a command."
+      if (this.pendingReply && this.pendingReply.type === expectedType) this.pendingReply = null
+      throw error
+    }
     return reply
   }
 
   private async write(payload: Uint8Array) {
     this.requireConnection()
-    if (this.writeCharacteristic.writeValueWithResponse) {
-      await this.writeCharacteristic.writeValueWithResponse(payload)
-    } else {
-      await this.writeCharacteristic.writeValue(payload)
-    }
+    const writeOperation = this.writeCharacteristic.writeValueWithResponse
+      ? this.writeCharacteristic.writeValueWithResponse(payload)
+      : this.writeCharacteristic.writeValue(payload)
+    // A GATT write can occasionally never settle (a stuck/busy Bluetooth
+    // stack). Without its own deadline, that hang would propagate all the
+    // way up through sendAndWait/stopProgram/startProgram, and beyond it to
+    // whatever is awaiting the whole restart - permanently freezing the
+    // dashboard, since it has no other route back to unfreezing.
+    await this.withTimeout(writeOperation, 10000, "Joule did not acknowledge the request before it timed out.")
+  }
+
+  private withTimeout<T>(promise: Promise<T>, timeout: number, message: string): Promise<T> {
+    return new Promise<T>((resolve, reject) => {
+      const handle = window.setTimeout(() => reject(new Error(message)), timeout)
+      promise.then(
+        (value) => { window.clearTimeout(handle); resolve(value) },
+        (error) => { window.clearTimeout(handle); reject(error) },
+      )
+    })
   }
 
   private requireConnection() {
