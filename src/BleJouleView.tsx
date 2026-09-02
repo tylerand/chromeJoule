@@ -117,13 +117,13 @@ class BleJouleView extends React.Component<BleJouleViewProps, any> {
     this.setState({ starting: true, status: "Sending cook request...", error: "" })
     const input = parseFloat(this.state.setPoint)
     const setPoint = this.state.isCelsius ? input : (input - 32) / 1.8
-    const cookTime = this.state.cookTime === "" ? 0 : parseInt(this.state.cookTime, 10) * 60
+    const cookTime = this.state.cookTime === "" ? 0 : this.parseCookTime(this.state.cookTime)
     if (!isFinite(setPoint) || setPoint < 0 || setPoint > 100) {
       this.setState({ starting: false, error: "Enter a target temperature from 0 to 100°C." })
       return
     }
     if (!isFinite(cookTime) || cookTime < 0 || cookTime > 86400) {
-      this.setState({ starting: false, error: "Enter a cook time from 1 to 1,440 minutes." })
+      this.setState({ starting: false, error: "Enter a cook time from 1 second to 24 hours." })
       return
     }
     if (this.state.developerMode) {
@@ -137,6 +137,8 @@ class BleJouleView extends React.Component<BleJouleViewProps, any> {
       this.setState({
         error: "",
         status: timed ? "Timed cook started." : cookTime > 0 ? "Cook started. The timer will begin at the target temperature." : "Cook started without a device timer.",
+        setPoint: input.toFixed(1),
+        cookTime: cookTime > 0 ? this.formatDuration(cookTime) : "",
         timerDuration: cookTime,
         timerEndsAt: timed ? Date.now() + (cookTime * 1000) : 0,
         pendingTimerSeconds: timed ? 0 : cookTime,
@@ -203,15 +205,16 @@ class BleJouleView extends React.Component<BleJouleViewProps, any> {
   public setTimer = async () => {
     // A manual timer value supersedes a queued +5 update.
     this.clearTimerExtensionUpdate()
-    const cookTime = parseInt(this.state.cookTime, 10) * 60
+    const cookTime = this.parseCookTime(this.state.cookTime)
     if (!isFinite(cookTime) || cookTime <= 0 || cookTime > 86400) {
-      this.setState({ error: "Enter a cook time from 1 to 1,440 minutes." })
+      this.setState({ error: "Enter a cook time from 1 second to 24 hours." })
       return
     }
     const startsTimerImmediately = this.canStartTimer(this.state.activeSetPoint)
     this.setState({
       error: "",
       status: startsTimerImmediately ? "Starting timer at the target temperature..." : "Timer saved. It will begin at the target temperature.",
+      cookTime: this.formatDuration(cookTime),
       timerDuration: cookTime,
       timerEndsAt: 0,
       pendingTimerSeconds: cookTime,
@@ -423,15 +426,15 @@ class BleJouleView extends React.Component<BleJouleViewProps, any> {
                     <div className="timer-input-row">
                       <div className="timer-input">
                         <input
-                          type="number"
-                          inputMode="numeric"
-                          min="1"
+                          type="text"
+                          inputMode="text"
+                          pattern="[0-9:]*"
                           value={this.state.cookTime}
                           onChange={(event) => this.setState({ cookTime: event.target.value })}
                           placeholder="Add a timer"
-                          aria-label="Cook time in minutes"
+                          aria-label="Cook time in minutes and seconds"
                         />
-                        <b>min</b>
+                        <b>min:sec</b>
                       </div>
                       {(hasTimer || timerIsPending) &&
                         <div className="timer-add-actions">
@@ -569,6 +572,7 @@ class BleJouleView extends React.Component<BleJouleViewProps, any> {
     if (this.state.developerMode) {
       this.setState({
         data: this.mockData(1, setPoint, startsTimerImmediately ? cookTime : 0),
+        setPoint: input.toFixed(1),
         activeSetPoint: setPoint,
         timerDuration: cookTime > 0 ? this.state.timerDuration || cookTime : 0,
         timerEndsAt: startsTimerImmediately ? Date.now() + (cookTime * 1000) : 0,
@@ -586,6 +590,7 @@ class BleJouleView extends React.Component<BleJouleViewProps, any> {
     try {
       const timed = await this.client.updateSetPoint(setPoint, startsTimerImmediately ? cookTime : 0)
       this.setState({
+        setPoint: input.toFixed(1),
         activeSetPoint: setPoint,
         timerDuration: cookTime > 0 ? this.state.timerDuration || cookTime : 0,
         timerEndsAt: timed ? Date.now() + (cookTime * 1000) : 0,
@@ -662,7 +667,7 @@ class BleJouleView extends React.Component<BleJouleViewProps, any> {
     const timerDuration = (this.state.timerDuration || currentSeconds) + additionalSeconds
     const nextTimerSeconds = currentSeconds + additionalSeconds
     this.setState({
-      cookTime: String(Math.ceil(timerDuration / 60)),
+      cookTime: this.formatDuration(timerDuration),
       timerDuration,
       timerEndsAt: timerIsRunning ? Date.now() + (nextTimerSeconds * 1000) : 0,
       pendingTimerSeconds: timerIsRunning ? 0 : nextTimerSeconds,
@@ -842,11 +847,14 @@ class BleJouleView extends React.Component<BleJouleViewProps, any> {
   }
 
   private startMockProgram(setPoint: number, cookTime: number) {
+    const input = parseFloat(this.state.setPoint)
     const startsTimerImmediately = cookTime > 0 && this.canStartTimer(setPoint)
     this.setState({
       data: this.mockData(1, setPoint, startsTimerImmediately ? cookTime : 0),
       error: "",
       status: startsTimerImmediately ? "Mock timed cook started." : cookTime > 0 ? "Mock cook started. The timer will begin at the target temperature." : "Mock cook started.",
+      setPoint: input.toFixed(1),
+      cookTime: cookTime > 0 ? this.formatDuration(cookTime) : "",
       timerDuration: cookTime,
       timerEndsAt: startsTimerImmediately ? Date.now() + (cookTime * 1000) : 0,
       pendingTimerSeconds: startsTimerImmediately ? 0 : cookTime,
@@ -898,6 +906,18 @@ class BleJouleView extends React.Component<BleJouleViewProps, any> {
     }
     this.client.forgetPairing()
     this.client.disconnect()
+  }
+
+  private parseCookTime(value: string) {
+    const parts = value.trim().split(":")
+    if (parts.length < 1 || parts.length > 3 || parts.some((part) => !/^\d+$/.test(part))) return NaN
+
+    const values = parts.map((part) => parseInt(part, 10))
+    if (values.length === 1) return values[0] * 60
+    if (values.length === 2) return values[1] < 60 ? (values[0] * 60) + values[1] : NaN
+    return values[1] < 60 && values[2] < 60
+      ? (values[0] * 3600) + (values[1] * 60) + values[2]
+      : NaN
   }
 
   private formatDuration(totalSeconds: number) {
