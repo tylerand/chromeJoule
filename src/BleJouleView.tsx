@@ -239,6 +239,19 @@ class BleJouleView extends React.Component<BleJouleViewProps, any> {
     })
   }
 
+  // How long the bath has held at or above its active target. This only
+  // depends on timeAtTemperatureSeconds/timeAtTemperatureStartedAt/now, none
+  // of which a Joule restart's freeze needs to hold still - so render() calls
+  // this directly instead of taking it from a possibly-frozen dashboard view,
+  // letting it keep ticking accurately through a restart instead of jumping
+  // once the freeze clears.
+  private timeAtTemperatureElapsed(state: any) {
+    return state.timeAtTemperatureSeconds +
+      (state.timeAtTemperatureStartedAt > 0
+        ? Math.max(0, Math.floor((state.now - state.timeAtTemperatureStartedAt) / 1000))
+        : 0)
+  }
+
   // Computes every value the dashboard renders from cook/timer state. Pulled
   // out of render() so a snapshot can be captured and reused while the UI is
   // frozen across a Joule restart (see freezeDashboard/unfreezeDashboard).
@@ -272,10 +285,7 @@ class BleJouleView extends React.Component<BleJouleViewProps, any> {
     const phase = this.cookPhase(isCooking, data, appliedTargetTemperature, hasReachedTarget)
     const isAtOrAboveTarget = this.isAtOrAboveTarget(state)
     const temperatureDirection = phase === "Preheating" ? "up" : phase === "Cooling" ? "down" : ""
-    const timeAtTemperature = state.timeAtTemperatureSeconds +
-      (state.timeAtTemperatureStartedAt > 0
-        ? Math.max(0, Math.floor((state.now - state.timeAtTemperatureStartedAt) / 1000))
-        : 0)
+    const timeAtTemperature = this.timeAtTemperatureElapsed(state)
     const canUpdateTemperature = isCooking &&
       isFinite(targetTemperature) &&
       (state.activeSetPoint === null || Math.abs(targetTemperature - state.activeSetPoint) > 0.05)
@@ -348,8 +358,12 @@ class BleJouleView extends React.Component<BleJouleViewProps, any> {
     const {
       data, temperature, isCooking, timerDuration, hasTimer, timerIsPending, timerIsPaused,
       displayedTimerSeconds, timerProgress, targetTemperature, phase, isAtOrAboveTarget,
-      temperatureDirection, timeAtTemperature, canUpdateTemperature,
+      temperatureDirection, canUpdateTemperature,
     } = this.state.uiFrozen && this.state.frozenView ? this.state.frozenView : this.deriveDashboardView(this.state)
+    // Always ticks from live state, even while the rest of the dashboard is
+    // frozen through a Joule restart - it doesn't need to hold still, and
+    // freezing it just made it jump once the freeze cleared.
+    const timeAtTemperature = this.timeAtTemperatureElapsed(this.state)
 
     return (
       <div className="content">
