@@ -563,6 +563,11 @@ body {
   color: #788a85;
 }
 
+.controller.dark .timer-segment .segment-label,
+.controller.dark .timer-separator {
+  color: #788a85;
+}
+
 .controller.dark .setting-field b,
 .controller.dark .unit-switcher {
   color: #73d2ed;
@@ -852,12 +857,68 @@ body, button, input {
 .timer-input {
   align-items: center;
   display: flex;
-  flex: 0 0 50%;
   min-width: 0;
 }
 
-.timer-input input {
+.timer-segmented-input {
+  align-items: flex-start;
+  display: inline-flex;
+  gap: 2px;
+}
+
+.timer-segment {
+  align-items: center;
+  display: flex;
+  flex-direction: column;
+  width: 38px;
+}
+
+.timer-segment input {
+  background: transparent;
+  border: 0;
+  color: inherit;
+  font: inherit;
+  font-size: 25px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 500;
+  letter-spacing: -0.04em;
+  line-height: 1;
   min-width: 0;
+  outline: none;
+  padding: 2px 0;
+  text-align: center;
+  width: 100%;
+}
+
+.timer-segment input::-webkit-inner-spin-button,
+.timer-segment input::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.timer-segment input[type="number"] {
+  -moz-appearance: textfield;
+}
+
+.timer-segment input::placeholder {
+  color: #a2ada9;
+}
+
+.timer-segment .segment-label {
+  color: #899691;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1;
+  margin-top: 4px;
+}
+
+.timer-separator {
+  color: #899691;
+  font-size: 22px;
+  font-weight: 500;
+  line-height: 1;
+  margin-top: 2px;
+  user-select: none;
 }
 
 .timer-add-actions {
