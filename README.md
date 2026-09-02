@@ -5,6 +5,7 @@ Chrome Joule is an unofficial Chrome extension for controlling a nearby Joule so
 ## Features
 
 - Direct Bluetooth connection to a nearby Joule
+- Automatic reconnecting overlay that preserves the dashboard after a temporary BLE disconnect
 - Manual cook controls for temperature and an optional `hr : min : sec` device timer
 - Live water-temperature, cook-phase, and timer updates
 - Device timers and the time-at-temperature clock that begin when the bath reaches its selected temperature
@@ -74,6 +75,10 @@ restarts when adding time several times.
 Chrome Joule schedules a Chrome alarm whenever a running timer changes. The
 alarm shows a browser notification at completion even when the controller tab
 is closed. Keep Chrome running for the most reliable timer notifications.
+
+If Joule temporarily disconnects while applying an updated cook command, Chrome
+Joule retains the dashboard and reconnects the already-paired device
+automatically. A retry button appears if that reconnect attempt fails.
 
 ## Limitations
 
