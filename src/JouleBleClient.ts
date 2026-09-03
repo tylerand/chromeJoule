@@ -373,96 +373,118 @@ export default class JouleBleClient {
     if (this.startRequestInProgress) throw new Error("Joule is already processing a cook request.")
     this.startRequestInProgress = true
     try {
-      await this.waitForRefresh()
-      await this.startLiveFeed(true)
-      // Diagnostic only: helps compare a failing restart (updateSetPoint/
-      // setTimer stop-then-start) against a working first start, since the
-      // same start-program requests have been rejected on the restart path
-      // only. Safe to remove once the restart-rejection cause is confirmed.
-      console.debug("Joule state before start request", {
-        programStep: this.latestData && this.latestData.programStep,
-        feedId: this.latestData && this.latestData.feedId,
-        sequenceNumber: this.latestData && this.latestData.sequenceNumber,
-      })
-      await this.write(streamMessage(field.identifyCirculatorRequest))
-      await this.delay(500)
-      await this.readResponse()
-
-      // Firmware revisions accept different request shapes, so try the smallest
-      // supported form before falling back to the more complete variants.
-      const compactProgram = concat(
-        floatField(1, setPoint),
-        integerField(5, 0),
-      )
-      const requestFor = (program: Uint8Array) => concat(
-        bytesField(1, program),
-        this.latestData ? integerField(2, this.latestData.feedId) : new Uint8Array(0),
-        this.latestData ? integerField(3, this.latestData.sequenceNumber) : new Uint8Array(0),
-      )
-
-      if (cookTime > 0) {
-        const timedProgram = concat(floatField(1, setPoint), integerField(2, cookTime), integerField(5, 0))
-        const timedReply = await this.sendAndWait(
-          streamMessage(field.startProgramRequest, requestFor(timedProgram)),
-          field.startProgramReply,
-          10000,
-        )
-        console.debug("Joule timed start response", { result: timedReply.result, cookTime })
-        if (timedReply.result === 0) return this.recordStartedProgram(setPoint, true)
+      // Rejections here have been observed to be transient - the very same
+      // request shape can be rejected on one round and accepted moments
+      // later (e.g. compact/full both rejected once, then compact/full both
+      // accepted on the next attempt with nothing else changed). With no
+      // Bluetooth adapter support for advertisement data on some systems,
+      // the address-aware attempt below - the normal last resort for a
+      // rejected full request - is never available either, so a single
+      // unlucky round previously left the cook stopped with no recovery.
+      // Retry the whole compact/full/address-aware sequence a few times,
+      // refreshing live telemetry between rounds, before giving up.
+      const maxAttempts = 3
+      let lastError: Error
+      for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+        try {
+          return await this.attemptStartProgram(setPoint, cookTime)
+        } catch (error) {
+          lastError = error
+          if (attempt < maxAttempts) {
+            console.debug(`Joule start attempt ${attempt} failed, retrying`, error)
+            await this.delay(750)
+          }
+        }
       }
-
-      const compactReply = await this.sendAndWait(
-        streamMessage(field.startProgramRequest, requestFor(compactProgram)),
-        field.startProgramReply,
-        10000,
-      )
-      console.debug("Joule compact start response", {
-        result: compactReply.result,
-        feedId: this.latestData && this.latestData.feedId,
-        sequenceNumber: this.latestData && this.latestData.sequenceNumber,
-      })
-      if (compactReply.result === 0) return this.recordStartedProgram(setPoint, false)
-
-      const fullProgram = concat(
-        compactProgram,
-        bytesField(6, bytesField(4, new TextEncoder().encode(this.cookId()))),
-        integerField(7, 0),
-      )
-      const fullReply = await this.sendAndWait(
-        streamMessage(field.startProgramRequest, requestFor(fullProgram)),
-        field.startProgramReply,
-        10000,
-      )
-      console.debug("Joule full start response", { result: fullReply.result })
-      if (fullReply.result === 0) return this.recordStartedProgram(setPoint, false)
-
-      if (this.recipientAddresses.length === 0) {
-        throw new Error(`Joule rejected the cook request (result ${fullReply.result}). Its Bluetooth address was not available for the final compatibility attempt.`)
-      }
-
-      let addressResult: number
-      for (const recipientAddress of this.recipientAddresses) {
-        const addressReply = await this.sendAndWait(
-          streamMessage(
-            field.startProgramRequest,
-            requestFor(fullProgram),
-            hexToKey("aabbaabbaabbaabb"),
-            recipientAddress,
-          ),
-          field.startProgramReply,
-          10000,
-        )
-        console.debug("Joule address-aware start response", {
-          result: addressReply.result,
-          recipientAddress: keyToHex(recipientAddress),
-        })
-        if (addressReply.result === 0) return this.recordStartedProgram(setPoint, false)
-        addressResult = addressReply.result
-      }
-      throw new Error(`Joule rejected the cook request (result ${addressResult}).`)
+      throw lastError
     } finally {
       this.startRequestInProgress = false
     }
+  }
+
+  // One round of startProgram()'s format fallback chain (timed/compact/full/
+  // address-aware). Split out so startProgram() can retry the whole chain -
+  // with fresh telemetry each time - when a round is entirely rejected; see
+  // the retry loop above for why that happens on otherwise-healthy Joules.
+  private async attemptStartProgram(setPoint: number, cookTime: number) {
+    await this.waitForRefresh()
+    await this.startLiveFeed(true)
+    await this.write(streamMessage(field.identifyCirculatorRequest))
+    await this.delay(500)
+    await this.readResponse()
+
+    // Firmware revisions accept different request shapes, so try the smallest
+    // supported form before falling back to the more complete variants.
+    const compactProgram = concat(
+      floatField(1, setPoint),
+      integerField(5, 0),
+    )
+    const requestFor = (program: Uint8Array) => concat(
+      bytesField(1, program),
+      this.latestData ? integerField(2, this.latestData.feedId) : new Uint8Array(0),
+      this.latestData ? integerField(3, this.latestData.sequenceNumber) : new Uint8Array(0),
+    )
+
+    if (cookTime > 0) {
+      const timedProgram = concat(floatField(1, setPoint), integerField(2, cookTime), integerField(5, 0))
+      const timedReply = await this.sendAndWait(
+        streamMessage(field.startProgramRequest, requestFor(timedProgram)),
+        field.startProgramReply,
+        10000,
+      )
+      console.debug("Joule timed start response", { result: timedReply.result, cookTime })
+      if (timedReply.result === 0) return this.recordStartedProgram(setPoint, true)
+    }
+
+    const compactReply = await this.sendAndWait(
+      streamMessage(field.startProgramRequest, requestFor(compactProgram)),
+      field.startProgramReply,
+      10000,
+    )
+    console.debug("Joule compact start response", {
+      result: compactReply.result,
+      feedId: this.latestData && this.latestData.feedId,
+      sequenceNumber: this.latestData && this.latestData.sequenceNumber,
+    })
+    if (compactReply.result === 0) return this.recordStartedProgram(setPoint, false)
+
+    const fullProgram = concat(
+      compactProgram,
+      bytesField(6, bytesField(4, new TextEncoder().encode(this.cookId()))),
+      integerField(7, 0),
+    )
+    const fullReply = await this.sendAndWait(
+      streamMessage(field.startProgramRequest, requestFor(fullProgram)),
+      field.startProgramReply,
+      10000,
+    )
+    console.debug("Joule full start response", { result: fullReply.result })
+    if (fullReply.result === 0) return this.recordStartedProgram(setPoint, false)
+
+    if (this.recipientAddresses.length === 0) {
+      throw new Error(`Joule rejected the cook request (result ${fullReply.result}). Its Bluetooth address was not available for the final compatibility attempt.`)
+    }
+
+    let addressResult: number
+    for (const recipientAddress of this.recipientAddresses) {
+      const addressReply = await this.sendAndWait(
+        streamMessage(
+          field.startProgramRequest,
+          requestFor(fullProgram),
+          hexToKey("aabbaabbaabbaabb"),
+          recipientAddress,
+        ),
+        field.startProgramReply,
+        10000,
+      )
+      console.debug("Joule address-aware start response", {
+        result: addressReply.result,
+        recipientAddress: keyToHex(recipientAddress),
+      })
+      if (addressReply.result === 0) return this.recordStartedProgram(setPoint, false)
+      addressResult = addressReply.result
+    }
+    throw new Error(`Joule rejected the cook request (result ${addressResult}).`)
   }
 
   public async stopProgram() {
