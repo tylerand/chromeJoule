@@ -622,10 +622,28 @@ export default class JouleBleClient {
     // The protocol does not correlate concurrent replies, so exactly one
     // command may wait for a response at a time.
     if (this.pendingReply) throw new Error("Joule is already processing a command.")
+    let timeoutHandle = 0
     const reply = new Promise<DecodedMessage>((resolve, reject) => {
-      this.pendingReply = { type: expectedType, resolve, reject }
-      window.setTimeout(() => {
-        if (this.pendingReply && this.pendingReply.type === expectedType) {
+      // Callers like startProgram send several requests of the same
+      // expectedType back-to-back (compact/full/address-aware retries), so
+      // a slot is identified by this specific record object, not merely by
+      // type. Comparing by reference - both here and in the timeout below -
+      // stops an earlier, already-settled request's stale timer from
+      // matching a later request that happens to share the same type. If it
+      // matched by type alone, that stale timer would clear the newer
+      // request's pendingReply out from under it once it eventually fires:
+      // the real reply arriving afterward would be silently dropped by
+      // processMessage() (pendingReply already null), and the newer
+      // request's own timeout would also find pendingReply already cleared
+      // and skip rejecting - leaving its promise unsettled forever.
+      const record = {
+        type: expectedType,
+        resolve: (message: DecodedMessage) => { window.clearTimeout(timeoutHandle); resolve(message) },
+        reject: (reason: Error) => { window.clearTimeout(timeoutHandle); reject(reason) },
+      }
+      this.pendingReply = record
+      timeoutHandle = window.setTimeout(() => {
+        if (this.pendingReply === record) {
           this.pendingReply = null
           reject(new Error("Joule did not respond before the request timed out."))
         }
