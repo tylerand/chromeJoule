@@ -4,13 +4,17 @@
   "description": "Unofficial Chrome extension for controlling a ChefSteps Joule",
   "scripts": {
     "build": "webpack --mode=production",
-    "watch": "webpack --watch --mode=development"
+    "watch": "webpack --watch --mode=development",
+    "test": "jest"
   },
   "devDependencies": {
+    "@types/jest": "^30.0.0",
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.5",
+    "jest": "^30.5.1",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
+    "ts-jest": "^29.4.12",
     "ts-loader": "^9.5.2",
     "typescript": "^5.7.3",
     "webpack": "^5.98.0",

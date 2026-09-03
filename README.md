@@ -28,6 +28,20 @@ npm run build
 
 In Chrome, open `chrome://extensions`, enable **Developer mode**, select **Load unpacked**, and choose the repository's `dist` directory. Select the extension icon to open the controller in a new tab.
 
+## Testing
+
+```sh
+npm test
+```
+
+Runs the Jest unit test suite in `test/`, covering the Joule wire-protocol
+encoding/decoding in `JouleBleClient.ts` and the pure cook/timer/dashboard
+calculations in `BleJouleView.tsx` (timer state derivation, cook phase,
+time-at-temperature accounting, and the UI-freeze snapshot used across a
+Joule restart). These do not require a Joule or Bluetooth adapter. Run this
+suite after any change that touches timer, cook-phase, or restart/freeze
+logic to confirm behavior is unchanged.
+
 ## Pairing a Joule
 
 1. Select **Connect Joule** and choose the cooker in Chrome's Bluetooth picker.

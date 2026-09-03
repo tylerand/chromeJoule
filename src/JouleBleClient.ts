@@ -12,7 +12,7 @@ const JOULE_MANUFACTURER_ID = 0x0159
 
 // Numeric protobuf field identifiers used by the subset of Joule's controller
 // protocol required for pairing, live telemetry, and manual cook programs.
-const field = {
+export const field = {
   startProgramRequest: 50,
   startProgramReply: 51,
   stopCirculatorRequest: 60,
@@ -49,7 +49,7 @@ interface DecodedMessage {
 
 // The protocol is protobuf-like but does not use a generated schema. These
 // helpers build the wire representation directly for the supported fields.
-function concat(...values: Uint8Array[]) {
+export function concat(...values: Uint8Array[]) {
   const length = values.reduce((total, value) => total + value.length, 0)
   const result = new Uint8Array(length)
   let offset = 0
@@ -60,7 +60,7 @@ function concat(...values: Uint8Array[]) {
   return result
 }
 
-function varint(value: number) {
+export function varint(value: number) {
   const bytes: number[] = []
   while (value > 127) {
     bytes.push((value & 127) | 128)
@@ -70,31 +70,31 @@ function varint(value: number) {
   return new Uint8Array(bytes)
 }
 
-function tag(fieldNumber: number, wireType: number) {
+export function tag(fieldNumber: number, wireType: number) {
   return varint((fieldNumber << 3) | wireType)
 }
 
-function bytesField(fieldNumber: number, value: Uint8Array) {
+export function bytesField(fieldNumber: number, value: Uint8Array) {
   return concat(tag(fieldNumber, 2), varint(value.length), value)
 }
 
-function integerField(fieldNumber: number, value: number) {
+export function integerField(fieldNumber: number, value: number) {
   return concat(tag(fieldNumber, 0), varint(value))
 }
 
-function floatField(fieldNumber: number, value: number) {
+export function floatField(fieldNumber: number, value: number) {
   const bytes = new Uint8Array(4)
   new DataView(bytes.buffer).setFloat32(0, value, true)
   return concat(tag(fieldNumber, 5), bytes)
 }
 
-function fixed32Field(fieldNumber: number, value: number) {
+export function fixed32Field(fieldNumber: number, value: number) {
   const bytes = new Uint8Array(4)
   new DataView(bytes.buffer).setUint32(0, value, true)
   return concat(tag(fieldNumber, 5), bytes)
 }
 
-function readVarint(data: Uint8Array, offset: number) {
+export function readVarint(data: Uint8Array, offset: number) {
   let value = 0
   let shift = 0
   while (offset < data.length) {
@@ -111,7 +111,7 @@ function readVarint(data: Uint8Array, offset: number) {
   throw new Error("Truncated protobuf varint")
 }
 
-function decodeFields(data: Uint8Array) {
+export function decodeFields(data: Uint8Array) {
   const fields: Array<{ number: number, wireType: number, value: number | Uint8Array }> = []
   let offset = 0
   while (offset < data.length) {
@@ -164,7 +164,7 @@ function streamMessage(
   )
 }
 
-function decodeDataPoint(data: Uint8Array): JouleData {
+export function decodeDataPoint(data: Uint8Array): JouleData {
   const point: JouleData = { bathTemp: 0, programStep: 0, timeRemaining: 0, feedId: 0, sequenceNumber: 0 }
   decodeFields(data).forEach((entry) => {
     if (entry.number === 1 && entry.wireType === 0) point.feedId = entry.value as number
@@ -176,7 +176,7 @@ function decodeDataPoint(data: Uint8Array): JouleData {
   return point
 }
 
-function decodeMessage(data: Uint8Array): DecodedMessage {
+export function decodeMessage(data: Uint8Array): DecodedMessage {
   const message: DecodedMessage = {}
   decodeFields(data).forEach((entry) => {
     if (entry.wireType !== 2 || typeof entry.value === "number") return
@@ -213,11 +213,11 @@ function decodeMessage(data: Uint8Array): DecodedMessage {
   return message
 }
 
-function keyToHex(key: Uint8Array) {
+export function keyToHex(key: Uint8Array) {
   return Array.prototype.map.call(key, (value: number) => (`0${value.toString(16)}`).slice(-2)).join("")
 }
 
-function hexToKey(value: string) {
+export function hexToKey(value: string) {
   const bytes = new Uint8Array(value.length / 2)
   for (let index = 0; index < bytes.length; index++) bytes[index] = parseInt(value.substr(index * 2, 2), 16)
   return bytes
