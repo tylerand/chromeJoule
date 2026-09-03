@@ -808,8 +808,17 @@ class BleJouleView extends React.Component<BleJouleViewProps, any> {
         pausedTimerSeconds: 0,
         timerStartFailed: false,
         ...timeAtTemperatureState,
-        error: timed || cookTime === 0 ? "" : "Joule restarted, but did not accept the remaining device timer.",
-        status: timed ? "Temperature and timer updated." : "Temperature updated.",
+        // Only report a rejected timer when one was actually sent to Joule
+        // (startsTimerImmediately). If the timer was deliberately withheld
+        // because the target hasn't been reached yet, cookTime is still the
+        // remaining timer duration but no timer request was ever attempted,
+        // so there is nothing to report as rejected.
+        error: !startsTimerImmediately || timed ? "" : "Joule restarted, but did not accept the remaining device timer.",
+        status: timed
+          ? "Temperature and timer updated."
+          : cookTime > 0
+            ? "Temperature updated. Timer will resume once the target temperature is reached."
+            : "Temperature updated.",
       })
     } catch (error) {
       this.endCookRestart(false)
