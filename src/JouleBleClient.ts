@@ -224,19 +224,41 @@ function hexToKey(value: string) {
 }
 
 export default class JouleBleClient {
+  // GATT plumbing populated by establishConnection(): the chosen device, its
+  // connected server, and the three characteristics of Joule's proprietary
+  // service (write commands, read responses, and subscribe to live data).
   private device: any
   private server: any
   private writeCharacteristic: any
   private readCharacteristic: any
   private subscribeCharacteristic: any
+  // The single in-flight sendAndWait() call, if any. The protocol has no
+  // request-correlation ID, so only one reply of a given type can be awaited
+  // at a time; processMessage() resolves this when a matching reply arrives,
+  // and its own timeout (see sendAndWait) rejects it if none ever does.
   private pendingReply: { type: number, resolve: (message: DecodedMessage) => void, reject: (reason: Error) => void } | null
   private dataListener: (data: JouleData) => void
+  // The device-specific pairing key. Loaded from local storage on
+  // reconnection, or captured from a fresh key-exchange reply on first pair.
   private authKey: Uint8Array | null
+  // The most recently decoded live telemetry point, used to prefill fields
+  // (feedId/sequenceNumber) that outgoing requests must echo back to Joule.
   private latestData: JouleData
+  // Notifications can arrive while a previous characteristic read is still
+  // pending. Every read is chained onto this promise so responses are always
+  // parsed in the order they were requested, never out of order.
   private readQueue: Promise<void> = Promise.resolve()
+  // Set while a refreshLiveData() call is in flight, so a second call can
+  // await the same refresh instead of issuing a redundant live-feed request.
   private refreshCompletion: Promise<void> | null = null
+  // Alternate Bluetooth addresses collected from advertisement/manufacturer
+  // data, tried as a last resort by startProgram() for firmware that rejects
+  // the standard (address-less) start-program request.
   private recipientAddresses: Uint8Array[] = []
-  private currentSetPoint: number | null
+  // The target temperature of the program Joule currently has running, if
+  // any. Recorded by recordStartedProgram()/loadCurrentProgram() and reused
+  // by setTimer() to restart the same program with just a new duration.
+  private currentSetPoint: number | null = null
   private startRequestInProgress = false
   private connected = false
   private statusListener: (status: string) => void
@@ -496,16 +518,7 @@ export default class JouleBleClient {
       }
     }
 
-    // Notifications can arrive while a previous characteristic read is pending.
-    // Serializing reads prevents responses from being parsed out of order.
-    this.readQueue = this.readQueue
-      .then(async () => {
-        if (this.connected) await this.processMessage(await this.readCharacteristic.readValue())
-      })
-      .catch((error) => {
-        if (this.connected) console.warn("Could not read Joule response from the data characteristic.", error)
-      })
-    await this.readQueue
+    await this.enqueueRead()
   }
 
   private handleAdvertisement = (event: any) => {
@@ -543,6 +556,13 @@ export default class JouleBleClient {
   }
 
   private async readResponse() {
+    await this.enqueueRead()
+  }
+
+  // Chains one more characteristic read onto readQueue so it is issued only
+  // after every previously queued read has finished being read and parsed,
+  // keeping responses in request order (see readQueue's field comment above).
+  private async enqueueRead() {
     this.readQueue = this.readQueue
       .then(async () => {
         if (this.connected) await this.processMessage(await this.readCharacteristic.readValue())

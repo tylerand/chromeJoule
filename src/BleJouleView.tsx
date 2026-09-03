@@ -14,13 +14,36 @@ interface BleJouleViewProps {
 
 class BleJouleView extends React.Component<BleJouleViewProps, any> {
   private client = new JouleBleClient()
+  // Ticks the displayed clock/countdowns once a second (see componentDidMount).
   private clockInterval: number
+  // Polls Joule for fresh telemetry every few seconds so the dashboard stays
+  // current between the notifications Joule sends on its own.
   private temperatureRefreshInterval: number
+  // Handle for the debounced "+5/+30 min" update: pressing the button again
+  // before this fires clears and reschedules it (see queueTimerExtensionUpdate),
+  // so several rapid presses become a single restart instead of one each.
   private timerExtensionTimeout = 0
+  // Set just before a deliberate disconnect/stop so handleConnectionLost can
+  // tell that drop apart from an unexpected one that should trigger a
+  // reconnect attempt instead of resetting the dashboard.
   private disconnectRequested = false
+  // Guards beginReconnection() against starting a second overlapping
+  // reconnect attempt while one is already running.
   private reconnectInProgress = false
+  // True for the whole span of a Joule restart (stop -> delay -> start),
+  // independent of React state so it can be read synchronously from the
+  // data callback (see connect()). Kept raised for a settle window after a
+  // successful restart too - see endCookRestart - because Joule's telemetry
+  // can still report the old "stopped" state for a few seconds afterward,
+  // and trusting that stale telemetry would flash the dashboard back to
+  // "not cooking".
   private cookRestartInProgress = false
+  // Incremented on every beginCookRestart() so a stale endCookRestart's
+  // delayed settle-timeout (see below) can recognize a newer restart has
+  // since begun and skip clearing cookRestartInProgress/cookRestarting.
   private cookRestartGeneration = 0
+  // Handle for the post-restart settle window described above; cleared and
+  // superseded whenever a new restart begins.
   private cookRestartSettleTimeout = 0
   private hoursInput: HTMLInputElement | null = null
   private minutesInput: HTMLInputElement | null = null
@@ -53,13 +76,22 @@ class BleJouleView extends React.Component<BleJouleViewProps, any> {
     timerStarting: false,
     cookRestarting: false,
     timerExtensionUpdating: false,
+    // Set when startPendingTimer() fails to start a timer once the target was
+    // reached. componentDidUpdate checks this before retrying, so a rejected
+    // start does not get immediately retried on every subsequent render.
     timerStartFailed: false,
     activeSetPoint: null,
     timeAtTemperatureStartedAt: 0,
     timeAtTemperatureSeconds: 0,
     timeAtTemperaturePending: false,
     now: Date.now(),
+    // True while the dashboard's rendered values are held at their last-good
+    // snapshot (frozenView) through a Joule restart; see freezeDashboard()/
+    // unfreezeDashboard() and deriveDashboardView().
     uiFrozen: false,
+    // Snapshot of deriveDashboardView(state) captured when uiFrozen became
+    // true; render() uses this instead of live state until unfrozen, and it
+    // is cleared back to null whenever uiFrozen is false.
     frozenView: null,
   }
 
@@ -737,6 +769,9 @@ class BleJouleView extends React.Component<BleJouleViewProps, any> {
           timeAtTemperaturePending: this.state.timeAtTemperaturePending,
         }
     if (this.state.developerMode) {
+      // The simulator applies the new target instantly with no Joule restart
+      // to wait for, so there is nothing to freeze or guard here - this
+      // branch can just set the resulting state directly.
       this.setState({
         data: this.mockData(1, setPoint, startsTimerImmediately ? cookTime : 0),
         setPoint: input.toFixed(1),
@@ -784,6 +819,9 @@ class BleJouleView extends React.Component<BleJouleViewProps, any> {
     }
   }
 
+  // Seconds left on the active timer, computed live from either the local
+  // countdown deadline (timerEndsAt) or, if none is set yet, from Joule's
+  // last reported timeRemaining adjusted for time elapsed since it arrived.
   private remainingTimerSeconds() {
     if (this.state.timerEndsAt > 0) return Math.max(0, Math.ceil((this.state.timerEndsAt - Date.now()) / 1000))
     const data: JouleData = this.state.data
@@ -946,6 +984,12 @@ class BleJouleView extends React.Component<BleJouleViewProps, any> {
       return
     }
 
+    // Start a timer that was selected before the target was reached, as soon
+    // as the bath gets there - but only once: timerStarting guards against a
+    // second call while the restart from the first is still in flight, and
+    // timerStartFailed keeps a rejected attempt from being retried on every
+    // subsequent render (the user must act - e.g. re-enter the timer - to
+    // clear it, since state resets it back to false).
     if (
       this.state.pendingTimerSeconds > 0 &&
       !this.state.timerStarting &&
