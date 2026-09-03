@@ -1184,6 +1184,17 @@ class BleJouleView extends React.Component<BleJouleViewProps, any> {
       this.resetDisconnectedState()
       return
     }
+    // A disconnect while the initial connect() is still establishing a brand
+    // new session (picker -> service discovery -> pairing-button exchange)
+    // is not a dropped *established* connection - it is connect()'s own
+    // catch block's problem to report. Joule commonly cycles the GATT link
+    // right after the physical pairing button is pressed, and if that were
+    // treated as an accidental disconnect here, beginReconnection() would
+    // run concurrently with the still in-flight client.connect() call,
+    // racing a client.reconnect() against it and surfacing the misleading
+    // "reconnecting / applying cook settings" dialog for what is actually a
+    // first-time pairing attempt.
+    if (this.state.connecting) return
     this.beginReconnection()
   }
 
