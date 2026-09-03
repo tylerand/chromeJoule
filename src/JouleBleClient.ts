@@ -375,6 +375,17 @@ export default class JouleBleClient {
     try {
       await this.waitForRefresh()
       await this.startLiveFeed(true)
+      // updateSetPoint()/setTimer() stop the running program and immediately
+      // restart it. Joule can ack that stop request (stopProgram's reply)
+      // before its firmware has actually finished tearing the program down
+      // internally, so a start request issued right away is rejected (seen
+      // live as compact/full attempts both failing with a nonzero result,
+      // where the very same requests succeed against a freshly connected,
+      // never-started Joule). Re-poll live telemetry for confirmation that
+      // Joule already agrees no program is active before requesting a start.
+      // This is a no-op - one already-satisfied check - for a first start,
+      // since programStep is 0 before any program has ever run.
+      await this.waitForStoppedProgram(5)
       await this.write(streamMessage(field.identifyCirculatorRequest))
       await this.delay(500)
       await this.readResponse()
@@ -704,6 +715,19 @@ export default class JouleBleClient {
 
   private async waitForRefresh() {
     if (this.refreshCompletion) await this.refreshCompletion
+  }
+
+  // Re-requests live telemetry a few times, giving Joule's firmware a chance
+  // to settle into "no program active" (programStep 0) after a stop request
+  // it already acknowledged. Bounded by attempt count, not a fixed delay, so
+  // it returns immediately once confirmed and never blocks a genuine first
+  // start (programStep is already 0 with no program having run yet).
+  private async waitForStoppedProgram(maxAttempts: number) {
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      if (!this.latestData || this.latestData.programStep === 0) return
+      await this.delay(300)
+      await this.startLiveFeed(true)
+    }
   }
 
   private cookId() {
