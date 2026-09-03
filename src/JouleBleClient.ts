@@ -375,6 +375,15 @@ export default class JouleBleClient {
     try {
       await this.waitForRefresh()
       await this.startLiveFeed(true)
+      // Diagnostic only: helps compare a failing restart (updateSetPoint/
+      // setTimer stop-then-start) against a working first start, since the
+      // same start-program requests have been rejected on the restart path
+      // only. Safe to remove once the restart-rejection cause is confirmed.
+      console.debug("Joule state before start request", {
+        programStep: this.latestData && this.latestData.programStep,
+        feedId: this.latestData && this.latestData.feedId,
+        sequenceNumber: this.latestData && this.latestData.sequenceNumber,
+      })
       await this.write(streamMessage(field.identifyCirculatorRequest))
       await this.delay(500)
       await this.readResponse()
