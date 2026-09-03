@@ -636,7 +636,7 @@ class BleJouleView extends React.Component<BleJouleViewProps, any> {
                             className="btn btn-secondary timer-add-button"
                             type="button"
                             onClick={() => this.addMinutes(5)}
-                            disabled={this.state.timerExtensionUpdating}
+                            disabled={this.state.starting || this.state.timerStarting || this.state.timerExtensionUpdating}
                           >
                             +5 min
                           </button>
@@ -644,7 +644,7 @@ class BleJouleView extends React.Component<BleJouleViewProps, any> {
                             className="btn btn-secondary timer-add-button"
                             type="button"
                             onClick={() => this.addMinutes(30)}
-                            disabled={this.state.timerExtensionUpdating}
+                            disabled={this.state.starting || this.state.timerStarting || this.state.timerExtensionUpdating}
                           >
                             +30 min
                           </button>
