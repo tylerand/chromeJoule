@@ -54,6 +54,11 @@ class BleJouleView extends React.Component<BleJouleViewProps, any> {
     connected: false,
     connecting: false,
     developerMode: false,
+    // Hidden unlock for reviewers without a physical Joule: toggling the
+    // light/dark switch 10 times reveals the developer-mode switch even when
+    // DEVELOPER_MODE_ENABLED is false in this build. See handleThemeToggle.
+    developerModeUnlocked: false,
+    themeToggleCount: 0,
     setPoint: "",
     cookHours: "",
     cookMinutes: "",
@@ -405,7 +410,7 @@ class BleJouleView extends React.Component<BleJouleViewProps, any> {
             <h1>Chrome Joule</h1>
           </div>
           <div className="header-controls">
-            {DEVELOPER_MODE_ENABLED &&
+            {!this.state.connected && (DEVELOPER_MODE_ENABLED || this.state.developerModeUnlocked) &&
               <button
                 className={`developer-toggle ${this.state.developerMode ? "enabled" : ""}`}
                 type="button"
@@ -419,7 +424,7 @@ class BleJouleView extends React.Component<BleJouleViewProps, any> {
             <button
               className={`theme-toggle ${this.props.darkMode ? "dark" : "light"}`}
               type="button"
-              onClick={this.props.onToggleDarkMode}
+              onClick={this.handleThemeToggleClick}
               aria-label={`Switch to ${this.props.darkMode ? "light" : "dark"} mode`}
             >
               <span className="theme-toggle-track">
@@ -1052,8 +1057,27 @@ class BleJouleView extends React.Component<BleJouleViewProps, any> {
     }
   }
 
+  // Reviewer escape hatch: the light/dark switch is always visible, so a
+  // reviewer who has no physical Joule can find this without needing hidden
+  // instructions in the store listing. 10 presses within this session reveal
+  // the developer-mode switch (see toggleDeveloperMode), which simulates a
+  // connected Joule for exercising the app's functionality.
+  private handleThemeToggleClick = () => {
+    this.props.onToggleDarkMode()
+
+    if (this.state.developerModeUnlocked) return
+
+    this.setState((state: any) => {
+      const themeToggleCount = state.themeToggleCount + 1
+      return {
+        themeToggleCount,
+        developerModeUnlocked: state.developerModeUnlocked || themeToggleCount >= 10,
+      }
+    })
+  }
+
   private toggleDeveloperMode = () => {
-    if (!DEVELOPER_MODE_ENABLED) return
+    if (!DEVELOPER_MODE_ENABLED && !this.state.developerModeUnlocked) return
 
     if (this.state.developerMode) {
       this.setState({
